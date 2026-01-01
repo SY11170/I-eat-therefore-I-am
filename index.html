@@ -13,7 +13,7 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
         body { font-family: 'Noto Sans TC', sans-serif; background-color: #f0f2f5; color: #546e7a; margin: 0; }
-        .lucide-icon { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; }
+        .lucide-icon { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; min-width: 1em; min-height: 1em; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
@@ -27,37 +27,53 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // 圖示組件：修正 Lucide 在 HTML 模式下的載入問題
+        // 圖示組件：強化檢查邏輯，避免庫未載入時崩潰
         const Icon = ({ name, size = 16, className = "" }) => {
             const [svg, setSvg] = useState("");
             useEffect(() => {
-                if (window.lucide && window.lucide.icons[name]) {
-                    setSvg(window.lucide.icons[name].toSvg({ size, class: className }));
+                const renderIcon = () => {
+                    if (window.lucide && window.lucide.icons[name]) {
+                        const svgString = window.lucide.icons[name].toSvg({ 
+                            size, 
+                            class: className,
+                            'stroke-width': 2
+                        });
+                        setSvg(svgString);
+                    }
+                };
+                
+                renderIcon();
+                // 如果 lucide 還沒準備好，稍後再試一次
+                if (!window.lucide) {
+                    const timer = setInterval(() => {
+                        if (window.lucide) {
+                            renderIcon();
+                            clearInterval(timer);
+                        }
+                    }, 100);
+                    return () => clearInterval(timer);
                 }
             }, [name, size, className]);
-            return <span className={`lucide-icon ${className}`} dangerouslySetInnerHTML={{ __html: svg }} />;
+
+            return svg ? (
+                <span className={`lucide-icon ${className}`} dangerouslySetInnerHTML={{ __html: svg }} />
+            ) : (
+                <span className="inline-block" style={{ width: size, height: size }}></span>
+            );
         };
 
-        const DrinkIcon = ({ size = 14, className = "" }) => (
-            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                <path d="M17 2l-.5 5h-9l-.5-5" /><path d="M7 7l1.5 14h7L17 7" /><path d="M11 2v5" /><path d="M9 2h4" />
-            </svg>
-        );
-
-        // --- 主程式開始 ---
         const App = () => {
             const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1));
             const [records, setRecords] = useState(() => {
-                const saved = localStorage.getItem('diet_records_2026_full');
-                return saved ? JSON.parse(saved) : {};
+                try {
+                    const saved = localStorage.getItem('diet_records_2026_full');
+                    return saved ? JSON.parse(saved) : {};
+                } catch (e) {
+                    return {};
+                }
             });
             const [selectedDate, setSelectedDate] = useState(null);
             const [isModalOpen, setIsModalOpen] = useState(false);
-            const [editingItem, setEditingItem] = useState(null);
-
-            const [statsConfig, setStatsConfig] = useState({
-                breakfast: true, lunch: true, dinner: true, nightSnack: true, instantNoodles: true, drinks: true
-            });
 
             const CATEGORIES = {
                 breakfast: { label: '早餐', color: 'text-[#91a5b8]', icon: 'Utensils' },
@@ -78,7 +94,6 @@
                 setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
             };
 
-            // 統計邏輯
             const stats = useMemo(() => {
                 let monthlySpend = 0, yearlySpend = 0, monthlyCups = 0, yearlyCups = 0;
                 const curMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
@@ -87,13 +102,13 @@
                 Object.entries(records).forEach(([date, data]) => {
                     const isMonth = date.startsWith(curMonthStr);
                     const isYear = date.startsWith(curYearStr);
-                    const dailySpend = (data.meals?.reduce((acc, m) => acc + (statsConfig[m.type] ? (parseInt(m.amount) || 0) : 0), 0) || 0) +
-                                      (data.drinks?.reduce((acc, d) => acc + (statsConfig.drinks ? (parseInt(d.amount) || 0) : 0), 0) || 0);
+                    const dailySpend = (data.meals?.reduce((acc, m) => acc + (parseInt(m.amount) || 0), 0) || 0) +
+                                      (data.drinks?.reduce((acc, d) => acc + (parseInt(d.amount) || 0), 0) || 0);
                     if (isMonth) { monthlySpend += dailySpend; monthlyCups += (data.drinks?.length || 0); }
                     if (isYear) { yearlySpend += dailySpend; yearlyCups += (data.drinks?.length || 0); }
                 });
                 return { monthlySpend, yearlySpend, monthlyCups, yearlyCups };
-            }, [records, currentDate, statsConfig]);
+            }, [records, currentDate]);
 
             const saveRecord = (type, data) => {
                 const dateStr = selectedDate;
@@ -104,12 +119,10 @@
                     else {
                         const key = type === 'drinks' ? 'drinks' : (type === 'exercise' ? 'exercise' : 'meals');
                         const item = (type === 'drinks' || type === 'exercise') ? data : { ...data, type };
-                        if (editingItem !== null && editingItem.type === type) dayData[key][editingItem.index] = item;
-                        else dayData[key].push(item);
+                        dayData[key].push(item);
                     }
                     return { ...prev, [dateStr]: dayData };
                 });
-                setEditingItem(null);
             };
 
             const deleteItem = (dateStr, key, index) => {
@@ -120,7 +133,6 @@
                 });
             };
 
-            // 月曆渲染
             const renderCalendar = () => {
                 const year = currentDate.getFullYear();
                 const month = currentDate.getMonth();
@@ -132,16 +144,16 @@
                 for (let d = 1; d <= daysInMonth; d++) {
                     const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                     const hasData = records[ds];
-                    const isToday = new Date().toDateString() === new Date(year, month, d).toDateString();
+                    const isToday = new Date().toLocaleDateString() === new Date(year, month, d).toLocaleDateString();
                     cells.push(
-                        <div key={d} onClick={() => { setSelectedDate(ds); setIsModalOpen(true); }} className="h-28 md:h-32 border border-slate-100 p-2 cursor-pointer hover:bg-slate-50 bg-white group transition-all">
+                        <div key={d} onClick={() => { setSelectedDate(ds); setIsModalOpen(true); }} className="h-28 md:h-32 border border-slate-100 p-2 cursor-pointer hover:bg-slate-50 bg-white group transition-all relative">
                             <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-lg ${isToday ? 'bg-[#91a5b8] text-white' : 'text-slate-300'}`}>{d}</span>
                             <div className="mt-2 flex flex-wrap gap-1">
                                 {hasData?.meals?.length > 0 && <div className="w-1.5 h-1.5 rounded-full bg-[#91a5b8]"></div>}
                                 {hasData?.drinks?.length > 0 && <div className="w-1.5 h-1.5 rounded-full bg-[#c7b198]"></div>}
                             </div>
                             <div className="absolute bottom-2 left-2 right-2 text-[10px] font-bold text-slate-300">
-                                {hasData?.weight && <div className="flex items-center gap-1"><Icon name="Scale" size={10}/>{hasData.weight}</div>}
+                                {hasData?.weight && <div className="flex items-center gap-1"><Icon name="Scale" size={10}/>{hasData.weight}kg</div>}
                             </div>
                         </div>
                     );
@@ -151,7 +163,6 @@
 
             return (
                 <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-8 animate-fade-in">
-                    {/* 頂部數據 */}
                     <header className="bg-white rounded-[2.5rem] p-8 md:p-10 shadow-sm border border-slate-200/50">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                             <div>
@@ -173,9 +184,8 @@
                         </div>
                     </header>
 
-                    {/* 月曆 */}
                     <div className="bg-white rounded-[2.5rem] p-6 md:p-10 shadow-sm border border-slate-200/50">
-                        <div className="grid grid-cols-7 border-l border-t border-slate-100 rounded-3xl overflow-hidden">
+                        <div className="grid grid-cols-7 border-l border-t border-slate-100 rounded-3xl overflow-hidden shadow-inner">
                             {['日', '一', '二', '三', '四', '五', '六'].map(d => (
                                 <div key={d} className="bg-[#f8f9fa] py-4 text-center text-[10px] font-bold text-[#b0bec5] border-r border-b border-slate-100 uppercase tracking-widest">{d}</div>
                             ))}
@@ -183,20 +193,19 @@
                         </div>
                     </div>
 
-                    {/* 彈窗詳情 */}
                     {isModalOpen && (
                         <div className="fixed inset-0 bg-[#263238]/40 backdrop-blur-md z-50 flex items-center justify-center p-4">
                             <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
                                 <div className="p-8 border-b border-slate-50 flex justify-between items-center">
                                     <h2 className="text-2xl font-black text-[#455a64]">{selectedDate} 紀錄明細</h2>
-                                    <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-300 hover:text-red-400"><Icon name="X" size={28}/></button>
+                                    <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-300 hover:text-red-400 transition-colors"><Icon name="X" size={28}/></button>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-10">
                                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                         <DetailCol title="飲食清單" items={records[selectedDate]?.meals || []} onDelete={(i) => deleteItem(selectedDate, 'meals', i)} render={(m) => (
                                             <div className="flex justify-between items-center">
                                                 <div>
-                                                    <div className="text-[10px] font-black text-[#91a5b8] uppercase mb-1">{CATEGORIES[m.type].label}</div>
+                                                    <div className="text-[10px] font-black text-[#91a5b8] uppercase mb-1">{CATEGORIES[m.type]?.label || '飲食'}</div>
                                                     <div className="font-bold text-[#455a64]">{m.name}</div>
                                                 </div>
                                                 <div className="font-black text-[#91a5b8]">${m.amount}</div>
@@ -217,36 +226,43 @@
                                         </div>
                                     </div>
 
-                                    {/* 新增表單 */}
                                     <div className="pt-8 border-t border-slate-50 grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div className="bg-[#f8f9fa] p-8 rounded-[2rem] space-y-4">
                                             <h4 className="font-black text-xs uppercase tracking-widest text-slate-400">新增飲食</h4>
                                             <div className="grid grid-cols-2 gap-2">
-                                                <input id="f-name" placeholder="品項名稱" className="p-3 rounded-xl border border-slate-100 text-sm" />
-                                                <input id="f-amount" type="number" placeholder="金額" className="p-3 rounded-xl border border-slate-100 text-sm" />
+                                                <input id="f-name" placeholder="品項名稱" className="p-3 rounded-xl border border-slate-100 text-sm focus:ring-1 focus:ring-[#91a5b8] outline-none" />
+                                                <input id="f-amount" type="number" placeholder="金額" className="p-3 rounded-xl border border-slate-100 text-sm focus:ring-1 focus:ring-[#91a5b8] outline-none" />
                                             </div>
-                                            <select id="f-type" className="w-full p-3 rounded-xl border border-slate-100 text-sm">
+                                            <select id="f-type" className="w-full p-3 rounded-xl border border-slate-100 text-sm outline-none">
                                                 {Object.keys(CATEGORIES).slice(0, 5).map(k => <option key={k} value={k}>{CATEGORIES[k].label}</option>)}
                                             </select>
                                             <button onClick={() => {
                                                 const n = document.getElementById('f-name').value;
                                                 const a = document.getElementById('f-amount').value;
                                                 const t = document.getElementById('f-type').value;
-                                                if(n && a) { saveRecord(t, {name: n, amount: a}); document.getElementById('f-name').value=''; document.getElementById('f-amount').value=''; }
-                                            }} className="w-full bg-[#91a5b8] text-white py-3 rounded-xl font-black text-sm uppercase">加入紀錄</button>
+                                                if(n && a) { 
+                                                    saveRecord(t, {name: n, amount: a}); 
+                                                    document.getElementById('f-name').value=''; 
+                                                    document.getElementById('f-amount').value=''; 
+                                                }
+                                            }} className="w-full bg-[#91a5b8] text-white py-3 rounded-xl font-black text-sm uppercase tracking-widest hover:bg-[#7e8da1] transition-colors shadow-lg shadow-[#91a5b8]/20">加入紀錄</button>
                                         </div>
 
                                         <div className="bg-[#fdfaf7] p-8 rounded-[2rem] space-y-4">
                                             <h4 className="font-black text-xs uppercase tracking-widest text-[#c1a07d]/70">新增手搖</h4>
                                             <div className="grid grid-cols-2 gap-2">
-                                                <input id="d-name" placeholder="飲品名稱" className="p-3 rounded-xl border border-[#f2ece5] text-sm" />
-                                                <input id="d-amount" type="number" placeholder="金額" className="p-3 rounded-xl border border-[#f2ece5] text-sm" />
+                                                <input id="d-name" placeholder="飲品名稱" className="p-3 rounded-xl border border-[#f2ece5] text-sm focus:ring-1 focus:ring-[#c1a07d] outline-none" />
+                                                <input id="d-amount" type="number" placeholder="金額" className="p-3 rounded-xl border border-[#f2ece5] text-sm focus:ring-1 focus:ring-[#c1a07d] outline-none" />
                                             </div>
                                             <button onClick={() => {
                                                 const n = document.getElementById('d-name').value;
                                                 const a = document.getElementById('d-amount').value;
-                                                if(n && a) { saveRecord('drinks', {name: n, amount: a, ice: '微冰', sugar: '微糖'}); document.getElementById('d-name').value=''; document.getElementById('d-amount').value=''; }
-                                            }} className="w-full bg-[#c1a07d] text-white py-3 rounded-xl font-black text-sm uppercase">加入紀錄</button>
+                                                if(n && a) { 
+                                                    saveRecord('drinks', {name: n, amount: a, ice: '微冰', sugar: '微糖'}); 
+                                                    document.getElementById('d-name').value=''; 
+                                                    document.getElementById('d-amount').value=''; 
+                                                }
+                                            }} className="w-full bg-[#c1a07d] text-white py-3 rounded-xl font-black text-sm uppercase tracking-widest hover:bg-[#b08e6b] transition-colors shadow-lg shadow-[#c1a07d]/20">加入紀錄</button>
                                         </div>
                                     </div>
                                 </div>
@@ -258,7 +274,7 @@
         };
 
         const StatCard = ({ title, value, unit, color, bgColor, icon }) => (
-            <div className={`${bgColor} p-6 rounded-[2rem] flex flex-col gap-1 border border-white/50 shadow-sm transition-transform hover:scale-105`}>
+            <div className={`${bgColor} p-6 rounded-[2rem] flex flex-col gap-1 border border-white/50 shadow-sm transition-all hover:scale-[1.02]`}>
                 <div className="flex justify-between items-start">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</span>
                     <div className={color}><Icon name={icon} size={16}/></div>
@@ -272,12 +288,17 @@
                 <h5 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-6 border-b border-slate-200 pb-2">{title} ({items.length})</h5>
                 <div className="space-y-3 flex-1">
                     {items.map((item, i) => (
-                        <div key={i} className="bg-white p-4 rounded-2xl border border-slate-50 shadow-sm relative group">
+                        <div key={i} className="bg-white p-4 rounded-2xl border border-slate-50 shadow-sm relative group animate-fade-in">
                             {render(item)}
-                            <button onClick={() => onDelete(i)} className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 bg-red-400 text-white p-1 rounded-full transition-all"><Icon name="Trash2" size={10}/></button>
+                            <button onClick={() => onDelete(i)} className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 bg-red-400 text-white p-1.5 rounded-full transition-all hover:scale-110"><Icon name="Trash2" size={12}/></button>
                         </div>
                     ))}
-                    {items.length === 0 && <div className="text-center py-10 opacity-20"><Icon name="Inbox" size={32}/></div>}
+                    {items.length === 0 && (
+                        <div className="flex-1 flex flex-col items-center justify-center opacity-10 py-10">
+                            <Icon name="Inbox" size={48}/>
+                            <span className="text-xs font-black mt-2">暫無數據</span>
+                        </div>
+                    )}
                 </div>
             </div>
         );
@@ -285,22 +306,47 @@
         const HealthBox = ({ title, value, unit, icon, color, onSave }) => {
             const [val, setVal] = useState("");
             return (
-                <div className={`${color} p-6 rounded-[2.5rem] text-white shadow-lg`}>
+                <div className={`${color} p-6 rounded-[2.5rem] text-white shadow-lg transition-all hover:shadow-xl`}>
                     <div className="flex justify-between items-center mb-4">
                         <span className="text-[10px] font-black uppercase tracking-widest opacity-70">{title}</span>
                         <Icon name={icon} size={16}/>
                     </div>
                     <div className="flex items-end gap-2 mb-4">
-                        <span className="text-3xl font-black">{value || "--"}</span>
+                        <span className="text-3xl font-black tracking-tighter">{value || "--"}</span>
                         <span className="text-xs opacity-50 mb-1">{unit}</span>
                     </div>
-                    <input type="number" value={val} onChange={e => setVal(e.target.value)} onBlur={() => {if(val){onSave(val); setVal("");}}} placeholder="輸入數值" className="w-full bg-white/10 border border-white/20 rounded-xl p-2 text-xs placeholder:text-white/30 outline-none" />
+                    <div className="relative">
+                        <input 
+                            type="number" 
+                            value={val} 
+                            onChange={e => setVal(e.target.value)} 
+                            onKeyDown={e => { if(e.key === 'Enter' && val) { onSave(val); setVal(""); } }}
+                            placeholder="更新數值" 
+                            className="w-full bg-white/10 border border-white/20 rounded-xl p-3 text-xs placeholder:text-white/30 outline-none focus:bg-white/20 transition-all" 
+                        />
+                        {val && (
+                            <button onClick={() => { onSave(val); setVal(""); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] bg-white text-[#455a64] px-2 py-1 rounded-lg font-bold">儲存</button>
+                        )}
+                    </div>
                 </div>
             );
         };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        // 啟動 React
+        const init = () => {
+            const container = document.getElementById('root');
+            if (container) {
+                const root = ReactDOM.createRoot(container);
+                root.render(<App />);
+            }
+        };
+
+        // 確保 DOM 載入後執行
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
     </script>
 </body>
 </html>
