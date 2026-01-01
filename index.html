@@ -2,310 +2,582 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>2026 吃吃喝喝統計表</title>
-    <!-- 核心套件：僅保留 Tailwind CSS, React, 與 Babel -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
-        body { 
-            font-family: 'Noto Sans TC', sans-serif; 
-            background-color: #f0f2f5; 
-            color: #546e7a; 
-            margin: 0; 
-            overflow-x: hidden;
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f0f2f5;
+            color: #546e7a;
         }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
         }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
     </style>
 </head>
-<body>
-    <div id="root">
-        <!-- 初始讀取狀態，避免白屏感 -->
-        <div style="display: flex; justify-content: center; align-items: center; height: 100vh; font-weight: bold; color: #91a5b8;">
-            系統載入中...
+<body class="p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto space-y-8">
+        <!-- 頂部統計卡片 -->
+        <div class="bg-white rounded-[2.5rem] p-8 md:p-10 shadow-sm border border-slate-200/50">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-10">
+                <div>
+                    <h1 class="text-4xl font-black text-[#455a64] tracking-tight mb-2">2026 吃吃喝喝</h1>
+                    <p class="text-sm text-[#90a4ae] font-bold italic">我吃故我在</p>
+                </div>
+                <div id="month-picker-main"></div>
+            </div>
+
+            <!-- 統計卡片 (無圖示版本) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-12" id="stats-container">
+                <!-- 由 JS 渲染 -->
+            </div>
+
+            <div class="pt-10 border-t border-slate-100 space-y-8">
+                <div class="flex flex-col md:flex-row items-start md:items-center gap-4">
+                    <span class="text-[10px] font-black text-[#90a4ae] uppercase tracking-widest">統計計入類別：</span>
+                    <div class="flex flex-wrap gap-2" id="config-container">
+                        <!-- 由 JS 渲染 -->
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="favorites-container">
+                    <!-- 由 JS 渲染 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 月曆區塊 -->
+        <div class="bg-white rounded-[2.5rem] shadow-sm border border-slate-200/50 p-8 space-y-6">
+            <div class="flex items-center justify-between">
+                <div id="month-picker-calendar"></div>
+                <div class="text-[10px] font-bold text-[#b0bec5] uppercase tracking-widest">Calendar View</div>
+            </div>
+            <div id="calendar-view"></div>
         </div>
     </div>
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+    <!-- 詳情 Modal -->
+    <div id="modal" class="fixed inset-0 bg-[#263238]/40 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-[3.5rem] shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
+            <div class="p-8 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white/80 backdrop-blur-md z-10">
+                <div class="flex items-center gap-4">
+                    <button onclick="shiftSelectedDate(-1)" class="p-3 hover:bg-slate-50 rounded-full text-[#b0bec5] font-bold">❮</button>
+                    <h2 id="modal-date-title" class="text-3xl font-black text-[#455a64] tracking-tight"></h2>
+                    <button onclick="shiftSelectedDate(1)" class="p-3 hover:bg-slate-50 rounded-full text-[#b0bec5] font-bold">❯</button>
+                </div>
+                <button onclick="closeModal()" class="p-4 hover:bg-[#ffebee] hover:text-[#e57373] rounded-full transition-all text-[#b0bec5] text-2xl">✕</button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-8 space-y-12 hide-scrollbar">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8" id="record-columns">
+                    <!-- 由 JS 渲染 -->
+                </div>
 
-        const App = () => {
-            const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1));
-            const [records, setRecords] = useState(() => {
-                try {
-                    const saved = localStorage.getItem('diet_records_2026_stable');
-                    return saved ? JSON.parse(saved) : {};
-                } catch (e) {
-                    return {};
-                }
-            });
-            const [selectedDate, setSelectedDate] = useState(null);
-            const [isModalOpen, setIsModalOpen] = useState(false);
+                <div class="pt-12 border-t border-slate-100">
+                    <h3 id="form-title" class="text-xl font-black text-[#455a64] mb-8 flex items-center gap-3">
+                        <div class="w-10 h-10 bg-[#91a5b8] text-white rounded-2xl flex items-center justify-center text-lg">＋</div>
+                        <span>新增紀錄</span>
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8" id="forms-container">
+                        <!-- 由 JS 渲染 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-            const CATEGORIES = {
-                breakfast: { label: '早餐', color: 'text-[#91a5b8]', icon: '🌅' },
-                lunch: { label: '午餐', color: 'text-[#8297a8]', icon: '☀️' },
-                dinner: { label: '晚餐', color: 'text-[#a1b39b]', icon: '🌙' },
-                nightSnack: { label: '宵夜', color: 'text-[#7e8a97]', icon: '🌌' },
-                instantNoodles: { label: '泡麵', color: 'text-[#b08e8e]', icon: '🍜' },
-                drinks: { label: '手搖', color: 'text-[#c7b198]', icon: '🥤' },
-                exercise: { label: '運動', color: 'text-[#8da69d]', icon: '💪' },
-                weight: { label: '體重', color: 'text-[#a3a3a3]', icon: '⚖️' }
-            };
+    <script>
+        // --- 核心資料與狀態 ---
+        let currentDate = new Date(2026, 0, 1);
+        let selectedDateStr = null;
+        let editingItem = null; // { type, index }
 
-            useEffect(() => {
-                localStorage.setItem('diet_records_2026_stable', JSON.stringify(records));
-            }, [records]);
+        let records = JSON.parse(localStorage.getItem('diet_records_2026_html_v2')) || {};
+        let statsConfig = {
+            breakfast: true, lunch: true, dinner: true, nightSnack: true, instantNoodles: true, drinks: true
+        };
 
-            const changeMonth = (offset) => {
-                setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
-            };
+        const CATEGORIES = {
+            breakfast: { label: '早餐', tag: '食' },
+            lunch: { label: '午餐', tag: '食' },
+            dinner: { label: '晚餐', tag: '食' },
+            nightSnack: { label: '宵夜', tag: '食' },
+            instantNoodles: { label: '泡麵', tag: '食' },
+            drinks: { label: '手搖', tag: '飲' },
+            fruits: { label: '水果', tag: '食' },
+            water: { label: '飲水', tag: '水' },
+            exercise: { label: '運動', tag: '動' },
+            weight: { label: '體重', tag: '重' }
+        };
 
-            const stats = useMemo(() => {
-                let monthlySpend = 0, yearlySpend = 0, monthlyCups = 0, yearlyCups = 0;
-                const curMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-                const curYearStr = `${currentDate.getFullYear()}`;
+        const ICE_OPTIONS = ['正常冰', '少冰', '微冰', '去冰', '完全不冰', '無法調整'];
+        const SUGAR_OPTIONS = ['正常甜', '少糖', '半糖', '微糖', '無糖', '無法調整'];
 
-                Object.entries(records).forEach(([date, data]) => {
-                    const isMonth = date.startsWith(curMonthStr);
-                    const isYear = date.startsWith(curYearStr);
-                    const dailySpend = (data.meals?.reduce((acc, m) => acc + (parseInt(m.amount) || 0), 0) || 0) +
-                                      (data.drinks?.reduce((acc, d) => acc + (parseInt(d.amount) || 0), 0) || 0);
-                    if (isMonth) { monthlySpend += dailySpend; monthlyCups += (data.drinks?.length || 0); }
-                    if (isYear) { yearlySpend += dailySpend; yearlyCups += (data.drinks?.length || 0); }
+        // --- 初始化 ---
+        function init() {
+            renderAll();
+        }
+
+        function saveAndRefresh() {
+            localStorage.setItem('diet_records_2026_html_v2', JSON.stringify(records));
+            renderAll();
+            if (selectedDateStr) renderModalContent();
+        }
+
+        function renderAll() {
+            renderMonthPickers();
+            renderStats();
+            renderConfig();
+            renderFavorites();
+            renderCalendar();
+        }
+
+        // --- UI 渲染邏輯 ---
+
+        function renderMonthPickers() {
+            const html = `
+                <div class="flex items-center gap-2 bg-[#f1f3f5] p-1.5 rounded-2xl w-fit border border-slate-200 px-4 py-2">
+                    <button onclick="changeMonth(-1)" class="p-2 hover:bg-white rounded-xl transition-all shadow-sm text-[#78909c] font-bold">❮</button>
+                    <span class="text-sm font-black text-[#546e7a] min-w-[100px] text-center">
+                        ${currentDate.getFullYear()} 年 ${currentDate.getMonth() + 1} 月
+                    </span>
+                    <button onclick="changeMonth(1)" class="p-2 hover:bg-white rounded-xl transition-all shadow-sm text-[#78909c] font-bold">❯</button>
+                </div>
+            `;
+            document.getElementById('month-picker-main').innerHTML = html;
+            document.getElementById('month-picker-calendar').innerHTML = html;
+        }
+
+        function changeMonth(offset) {
+            currentDate.setMonth(currentDate.getMonth() + offset);
+            renderAll();
+        }
+
+        function renderStats() {
+            const s = calculateStats();
+            const container = document.getElementById('stats-container');
+            container.innerHTML = `
+                ${statCardHTML('當月累計消費', s.monthlySpend, '$', 'text-[#91a5b8]', 'bg-[#e9eff5]')}
+                ${statCardHTML('當年累計消費', s.yearlySpend, '$', 'text-[#7e8a97]', 'bg-[#f1f3f5]')}
+                ${statCardHTML('當月累計杯數', s.monthlyCups, '杯', 'text-[#c1a07d]', 'bg-[#f7f3ef]')}
+                ${statCardHTML('當年累計杯數', s.yearlyCups, '杯', 'text-[#90a4ae]', 'bg-[#f8f9fa]')}
+            `;
+        }
+
+        function statCardHTML(title, value, unit, color, bgColor) {
+            return `
+                <div class="${bgColor} border border-white/50 p-8 rounded-[2.5rem] flex flex-col gap-1 shadow-sm transition-transform hover:scale-[1.02]">
+                    <p class="text-[10px] font-black text-[#90a4ae] uppercase tracking-[0.2em] mb-2">${title}</p>
+                    <p class="text-3xl font-black ${color}">
+                        ${value.toLocaleString()} 
+                        <span class="text-sm font-normal opacity-40 ml-1.5">${unit}</span>
+                    </p>
+                </div>
+            `;
+        }
+
+        function renderConfig() {
+            const container = document.getElementById('config-container');
+            container.innerHTML = ['breakfast', 'lunch', 'dinner', 'nightSnack', 'instantNoodles', 'drinks'].map(key => `
+                <label class="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black cursor-pointer transition-all border ${statsConfig[key] ? 'bg-[#91a5b8] border-[#91a5b8] text-white shadow-md shadow-[#91a5b8]/10' : 'bg-white border-slate-200 text-[#90a4ae] hover:border-[#91a5b8]'}">
+                    <input type="checkbox" class="hidden" ${statsConfig[key] ? 'checked' : ''} onchange="toggleConfig('${key}')">
+                    ${CATEGORIES[key].label}
+                </label>
+            `).join('');
+        }
+
+        function toggleConfig(key) {
+            statsConfig[key] = !statsConfig[key];
+            renderAll();
+        }
+
+        function renderFavorites() {
+            const s = calculateStats();
+            const container = document.getElementById('favorites-container');
+            container.innerHTML = `
+                <div class="space-y-4">
+                    ${favHTML('本月最愛飲品', s.topDrinkMonth, '飲', 'text-[#c1a07d]', 'bg-[#fdfaf7]')}
+                    ${favHTML('本月最愛吃', s.topMealMonth, '食', 'text-[#71869d]', 'bg-[#f8fafb]')}
+                </div>
+                <div class="space-y-4">
+                    ${favHTML('今年最愛飲品', s.topDrinkYear, '飲', 'text-[#90a4ae]', 'bg-[#f8f9fa]')}
+                    ${favHTML('今年最愛吃', s.topMealYear, '食', 'text-[#90a4ae]', 'bg-[#f8f9fa]')}
+                </div>
+            `;
+        }
+
+        function favHTML(label, data, tag, color, bgColor) {
+            return `
+                <div class="${bgColor} p-5 rounded-3xl flex items-center justify-between border border-slate-100 shadow-sm">
+                    <span class="text-[10px] font-black text-[#90a4ae] uppercase tracking-[0.2em] flex items-center gap-2">
+                        <span class="w-6 h-6 bg-white rounded-lg flex items-center justify-center border border-slate-200">${tag}</span> ${label}
+                    </span>
+                    <div class="flex flex-col items-end gap-1 max-w-[65%]">
+                        <span class="text-sm font-black text-right break-words leading-tight ${color}">${data.text}</span>
+                        ${data.count > 0 ? `<span class="text-[10px] font-black bg-white/50 text-[#90a4ae] px-2 py-0.5 rounded-lg border border-slate-200">共 ${data.count} ${data.unit}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderCalendar() {
+            const container = document.getElementById('calendar-view');
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const firstDay = new Date(year, month, 1).getDay();
+            
+            let html = `
+                <div class="calendar-grid border-l border-t border-slate-200 rounded-[1.5rem] overflow-hidden shadow-sm">
+                    ${['日', '一', '二', '三', '四', '五', '六'].map(d => `
+                        <div class="bg-[#f8f9fa] py-3 text-center text-[10px] font-bold text-[#b0bec5] border-r border-b border-slate-200 tracking-widest uppercase">${d}</div>
+                    `).join('')}
+            `;
+
+            for (let i = 0; i < firstDay; i++) {
+                html += `<div class="h-32 border-r border-b border-slate-100 bg-slate-50/20"></div>`;
+            }
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const data = records[dateStr];
+                const isToday = d === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
+
+                html += `
+                    <div onclick="openModal('${dateStr}')" class="h-32 border-r border-b border-slate-100 p-2 cursor-pointer hover:bg-[#f4f7f9] transition-all relative bg-white">
+                        <span class="text-xs font-bold w-6 h-6 flex items-center justify-center rounded-lg ${isToday ? 'bg-[#91a5b8] text-white shadow-lg' : 'text-[#90a4ae]'}">${d}</span>
+                        <div class="flex flex-wrap gap-1.5 mt-3">
+                            ${data?.meals?.length > 0 ? `<span class="text-sm font-black bg-[#e9eff5] text-[#91a5b8] px-2 py-0.5 rounded-lg border-2 border-[#d1dce7]">食</span>` : ''}
+                            ${data?.drinks?.length > 0 ? `<span class="text-sm font-black bg-[#f7f3ef] text-[#c7b198] px-2 py-0.5 rounded-lg border-2 border-[#f2ece5]">飲</span>` : ''}
+                            ${data?.exercise?.length > 0 ? `<span class="text-sm font-black bg-[#f1f5f3] text-[#8da69d] px-2 py-0.5 rounded-lg border-2 border-[#d1dbd6]">動</span>` : ''}
+                        </div>
+                        <div class="absolute bottom-2 left-2 right-2 flex flex-col items-start gap-1">
+                            ${data?.water > 0 ? `<div class="text-[10px] font-black text-[#718d96] bg-[#eef5f7] px-1.5 rounded">${data.water}ml</div>` : ''}
+                            ${data?.weight ? `<div class="text-[10px] font-black text-[#90a4ae] bg-slate-100 px-1.5 rounded">${data.weight}kg</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+            html += `</div>`;
+            container.innerHTML = html;
+        }
+
+        // --- 統計計算 ---
+        function calculateStats() {
+            let mSpend = 0, ySpend = 0, mCups = 0, yCups = 0;
+            let dFreq = { m: {}, y: {} }, mFreq = { m: {}, y: {} };
+            const mKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+            const yKey = `${currentDate.getFullYear()}`;
+
+            Object.entries(records).forEach(([date, data]) => {
+                const isM = date.startsWith(mKey);
+                const isY = date.startsWith(yKey);
+                
+                const dSpend = (data.meals?.reduce((acc, m) => acc + (statsConfig[m.type] ? (parseInt(m.amount) || 0) : 0), 0) || 0) +
+                              (data.drinks?.reduce((acc, d) => acc + (statsConfig.drinks ? (parseInt(d.amount) || 0) : 0), 0) || 0);
+                
+                if (isM) { mSpend += dSpend; mCups += (data.drinks?.length || 0); }
+                if (isY) { ySpend += dSpend; yCups += (data.drinks?.length || 0); }
+
+                data.drinks?.forEach(d => {
+                    const k = `${d.brand} ${d.name}`.trim() || '未命名';
+                    if(isM) dFreq.m[k] = (dFreq.m[k] || 0) + 1;
+                    if(isY) dFreq.y[k] = (dFreq.y[k] || 0) + 1;
                 });
-                return { monthlySpend, yearlySpend, monthlyCups, yearlyCups };
-            }, [records, currentDate]);
-
-            const saveRecord = (type, data) => {
-                const dateStr = selectedDate;
-                setRecords(prev => {
-                    const dayData = JSON.parse(JSON.stringify(prev[dateStr] || { meals: [], drinks: [], exercise: [], weight: '', water: 0 }));
-                    if (type === 'water') dayData.water = parseInt(data.amount || 0);
-                    else if (type === 'weight') dayData.weight = data.amount;
-                    else {
-                        const key = type === 'drinks' ? 'drinks' : (type === 'exercise' ? 'exercise' : 'meals');
-                        const item = (type === 'drinks' || type === 'exercise') ? data : { ...data, type };
-                        dayData[key].push(item);
+                data.meals?.forEach(m => {
+                    if (statsConfig[m.type]) {
+                        const k = `${m.brand} ${m.name}`.trim() || '未命名';
+                        if(isM) mFreq.m[k] = (mFreq.m[k] || 0) + 1;
+                        if(isY) mFreq.y[k] = (mFreq.y[k] || 0) + 1;
                     }
-                    return { ...prev, [dateStr]: dayData };
                 });
+            });
+
+            const getTop = (f, u) => {
+                const ent = Object.entries(f);
+                if (!ent.length) return { text: '無數據', count: 0, unit: u };
+                const max = Math.max(...ent.map(e => e[1]));
+                return { text: ent.filter(e => e[1] === max).map(e => e[0]).join(', '), count: max, unit: u };
             };
 
-            const deleteItem = (dateStr, key, index) => {
-                setRecords(prev => {
-                    const newData = { ...prev };
-                    newData[dateStr][key].splice(index, 1);
-                    return { ...newData };
-                });
+            return { monthlySpend: mSpend, yearlySpend: ySpend, monthlyCups: mCups, yearlyCups: yCups,
+                topDrinkMonth: getTop(dFreq.m, '杯'), topDrinkYear: getTop(dFreq.y, '杯'),
+                topMealMonth: getTop(mFreq.m, '次'), topMealYear: getTop(mFreq.y, '次')
             };
+        }
 
-            const renderCalendar = () => {
-                const year = currentDate.getFullYear();
-                const month = currentDate.getMonth();
-                const daysInMonth = new Date(year, month + 1, 0).getDate();
-                const firstDay = new Date(year, month, 1).getDay();
-                const cells = [];
+        // --- Modal & 詳情控制 ---
 
-                for (let i = 0; i < firstDay; i++) cells.push(<div key={`empty-${i}`} className="h-24 md:h-32 border border-slate-100 bg-slate-50/20"></div>);
-                for (let d = 1; d <= daysInMonth; d++) {
-                    const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                    const hasData = records[ds];
-                    const isToday = new Date().toLocaleDateString() === new Date(year, month, d).toLocaleDateString();
-                    cells.push(
-                        <div key={d} onClick={() => { setSelectedDate(ds); setIsModalOpen(true); }} className="h-24 md:h-32 border border-slate-100 p-2 cursor-pointer hover:bg-slate-50 bg-white group transition-all relative overflow-hidden">
-                            <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-lg ${isToday ? 'bg-[#91a5b8] text-white' : 'text-slate-300'}`}>{d}</span>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                                {hasData?.meals?.length > 0 && <div className="w-1.5 h-1.5 rounded-full bg-[#91a5b8]"></div>}
-                                {hasData?.drinks?.length > 0 && <div className="w-1.5 h-1.5 rounded-full bg-[#c7b198]"></div>}
+        function openModal(dateStr) {
+            selectedDateStr = dateStr;
+            editingItem = null;
+            document.getElementById('modal').classList.remove('hidden');
+            renderModalContent();
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+            selectedDateStr = null;
+            editingItem = null;
+        }
+
+        function shiftSelectedDate(offset) {
+            const d = new Date(selectedDateStr);
+            d.setDate(d.getDate() + offset);
+            selectedDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            if (d.getMonth() !== currentDate.getMonth()) {
+                currentDate = new Date(d.getFullYear(), d.getMonth(), 1);
+                renderAll();
+            }
+            editingItem = null;
+            renderModalContent();
+        }
+
+        function renderModalContent() {
+            document.getElementById('modal-date-title').innerText = selectedDateStr;
+            const data = records[selectedDateStr] || { meals: [], drinks: [], fruits: [], exercise: [], weight: '', water: 0 };
+            
+            const colContainer = document.getElementById('record-columns');
+            colContainer.innerHTML = `
+                ${renderCol('飲食清單', data.meals, 'meals', m => `
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-start">
+                            <div class="space-y-1">
+                                <span class="text-[10px] font-black px-2 py-0.5 rounded-lg border uppercase ${m.type === 'instantNoodles' ? 'bg-[#fbe9e7] border-[#ffccbc] text-[#d84315]' : 'bg-[#e9eff5] border-[#d1dce7] text-[#546e7a]'}">${CATEGORIES[m.type].label}</span>
+                                <div class="text-base font-black text-[#455a64]">${m.brand ? `<span class="text-[#91a5b8] mr-1">[${m.brand}]</span>` : ''}${m.name}</div>
                             </div>
-                            <div className="absolute bottom-1 left-2 text-[9px] font-bold text-slate-400">
-                                {hasData?.weight && <div>⚖️ {hasData.weight}kg</div>}
-                            </div>
+                            <span class="text-lg font-black text-[#71869d]">$${m.amount}</span>
                         </div>
-                    );
-                }
-                return cells;
-            };
-
-            return (
-                <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6 animate-fade-in">
-                    {/* Header */}
-                    <header className="bg-white rounded-[2rem] p-6 md:p-10 shadow-sm border border-slate-200/50">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                            <div>
-                                <h1 className="text-3xl font-black text-[#455a64] tracking-tight">2026 吃吃喝喝 📋</h1>
-                                <p className="text-[10px] text-[#90a4ae] font-bold mt-1 tracking-widest uppercase">Stable Health Management</p>
-                            </div>
-                            <div className="flex items-center gap-4 bg-[#f8f9fa] px-4 py-2 rounded-xl border border-slate-100">
-                                <button onClick={() => changeMonth(-1)} className="hover:text-[#91a5b8] font-bold">❮</button>
-                                <span className="font-black text-[#546e7a] min-w-[100px] text-center">{currentDate.getFullYear()} / {currentDate.getMonth() + 1}</span>
-                                <button onClick={() => changeMonth(1)} className="hover:text-[#91a5b8] font-bold">❯</button>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-8">
-                            <StatCard title="當月開銷" value={stats.monthlySpend} unit="$" color="text-[#91a5b8]" bgColor="bg-[#e9eff5]" icon="💰" />
-                            <StatCard title="當年開銷" value={stats.yearlySpend} unit="$" color="text-[#7e8a97]" bgColor="bg-[#f1f3f5]" icon="📈" />
-                            <StatCard title="當月手搖" value={stats.monthlyCups} unit="杯" color="text-[#c1a07d]" bgColor="bg-[#f7f3ef]" icon="🥤" />
-                            <StatCard title="當年手搖" value={stats.yearlyCups} unit="杯" color="text-[#90a4ae]" bgColor="bg-[#f8f9fa]" icon="📊" />
-                        </div>
-                    </header>
-
-                    {/* Calendar Grid */}
-                    <div className="bg-white rounded-[2rem] p-4 md:p-8 shadow-sm border border-slate-200/50">
-                        <div className="calendar-grid border-l border-t border-slate-100 rounded-2xl overflow-hidden">
-                            {['日', '一', '二', '三', '四', '五', '六'].map(d => (
-                                <div key={d} className="bg-[#f8f9fa] py-3 text-center text-[10px] font-bold text-[#b0bec5] border-r border-b border-slate-100 uppercase">{d}</div>
-                            ))}
-                            {renderCalendar()}
-                        </div>
+                        ${m.note ? `<div class="text-xs text-slate-400 p-2 bg-slate-50 rounded-xl border border-slate-100 mt-1">● ${m.note}</div>` : ''}
                     </div>
+                `)}
+                ${renderCol('手搖飲', data.drinks, 'drinks', d => `
+                    <div class="space-y-3">
+                        <div class="flex justify-between font-black text-[#455a64]">
+                            <span class="text-base">${d.brand ? `<span class="text-[#c1a07d] mr-1">[${d.brand}]</span>` : ''}${d.name}</span>
+                            <span class="text-[#c1a07d] text-lg">$${d.amount}</span>
+                        </div>
+                        <div class="flex gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            <span class="bg-[#f7f3ef] px-2 py-0.5 rounded-lg border border-[#f2ece5]">${d.ice}</span>
+                            <span class="bg-[#f7f3ef] px-2 py-0.5 rounded-lg border border-[#f2ece5]">${d.sugar}</span>
+                        </div>
+                        ${d.note ? `<div class="text-xs text-slate-400 p-2 bg-slate-50 rounded-xl border border-slate-100">● ${d.note}</div>` : ''}
+                    </div>
+                `)}
+                ${renderCol('生活與運動', data.exercise, 'exercise', e => `
+                    <div class="space-y-1">
+                        <div class="text-base font-black text-[#455a64] flex items-center gap-2">
+                           <div class="w-8 h-8 bg-[#f1f5f3] rounded-xl text-[#8da69d] flex items-center justify-center text-xs">動</div>
+                           ${e.name} ${e.time ? `<span class="text-xs font-normal text-slate-400">(${e.time})</span>` : ''}
+                        </div>
+                        ${e.location ? `<div class="text-xs text-[#90a4ae] ml-10 italic">${e.location}</div>` : ''}
+                    </div>
+                `, 
+                data.weight ? `<div class="mb-4 p-5 bg-[#455a64] rounded-3xl flex items-center justify-between text-white shadow-lg border border-white/10"><div class="font-black text-[10px] tracking-widest opacity-70">WEIGHT</div><span class="text-2xl font-black">${data.weight} <small class="text-xs opacity-50">kg</small></span></div>` : '',
+                data.water > 0 ? `<div class="mt-4 p-5 bg-[#9eb8c0] rounded-3xl flex items-center justify-between text-white shadow-lg border border-white/10"><div class="font-black text-[10px] tracking-widest opacity-80">WATER</div><span class="text-2xl font-black">${data.water} <small class="text-xs opacity-50">ml</small></span></div>` : ''
+                )}
+            `;
 
-                    {/* Modal */}
-                    {isModalOpen && (
-                        <div className="fixed inset-0 bg-[#263238]/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-fade-in">
-                                <div className="p-6 border-b border-slate-50 flex justify-between items-center">
-                                    <h2 className="text-xl font-black text-[#455a64]">📅 {selectedDate}</h2>
-                                    <button onClick={() => setIsModalOpen(false)} className="text-slate-300 hover:text-red-400 text-2xl font-bold">✕</button>
-                                </div>
-                                
-                                <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-8">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                        <DetailCol title="🍴 飲食紀錄" items={records[selectedDate]?.meals || []} onDelete={(i) => deleteItem(selectedDate, 'meals', i)} render={(m) => (
-                                            <div className="flex justify-between items-center w-full">
-                                                <div>
-                                                    <div className="text-[10px] font-black text-[#91a5b8] mb-0.5">{CATEGORIES[m.type]?.label}</div>
-                                                    <div className="font-bold text-[#455a64] text-sm">{m.name}</div>
-                                                </div>
-                                                <div className="font-black text-[#91a5b8] text-sm">${m.amount}</div>
-                                            </div>
-                                        )} />
-                                        <DetailCol title="🥤 手搖飲品" items={records[selectedDate]?.drinks || []} onDelete={(i) => deleteItem(selectedDate, 'drinks', i)} render={(d) => (
-                                            <div className="flex justify-between items-center w-full text-[#c1a07d]">
-                                                <div>
-                                                    <div className="font-bold text-sm">{d.name}</div>
-                                                    <div className="text-[10px] opacity-70">微冰 / 微糖</div>
-                                                </div>
-                                                <div className="font-black text-sm">${d.amount}</div>
-                                            </div>
-                                        )} />
-                                        <div className="space-y-4">
-                                            <HealthBox title="體重" value={records[selectedDate]?.weight} unit="kg" icon="⚖️" color="bg-[#455a64]" onSave={(v) => saveRecord('weight', {amount: v})} />
-                                            <HealthBox title="水分" value={records[selectedDate]?.water} unit="ml" icon="💧" color="bg-[#9eb8c0]" onSave={(v) => saveRecord('water', {amount: v})} />
-                                        </div>
-                                    </div>
+            renderForms();
+        }
 
-                                    {/* Input Section */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="bg-[#f8f9fa] p-6 rounded-3xl space-y-3">
-                                            <h4 className="font-black text-[10px] uppercase tracking-widest text-slate-400">新增飲食</h4>
-                                            <div className="flex gap-2">
-                                                <input id="f-name" placeholder="名稱" className="flex-1 p-2 rounded-lg border border-slate-100 text-sm outline-none" />
-                                                <input id="f-amount" type="number" placeholder="金額" className="w-20 p-2 rounded-lg border border-slate-100 text-sm outline-none" />
-                                            </div>
-                                            <select id="f-type" className="w-full p-2 rounded-lg border border-slate-100 text-sm outline-none">
-                                                {Object.keys(CATEGORIES).slice(0, 5).map(k => <option key={k} value={k}>{CATEGORIES[k].label}</option>)}
-                                            </select>
-                                            <button onClick={() => {
-                                                const n = document.getElementById('f-name').value;
-                                                const a = document.getElementById('f-amount').value;
-                                                const t = document.getElementById('f-type').value;
-                                                if(n && a) { 
-                                                    saveRecord(t, {name: n, amount: a}); 
-                                                    document.getElementById('f-name').value=''; 
-                                                    document.getElementById('f-amount').value=''; 
-                                                }
-                                            }} className="w-full bg-[#91a5b8] text-white py-2 rounded-lg font-bold text-xs uppercase hover:bg-[#7e8da1]">確認新增</button>
-                                        </div>
-
-                                        <div className="bg-[#fdfaf7] p-6 rounded-3xl space-y-3">
-                                            <h4 className="font-black text-[10px] uppercase tracking-widest text-[#c1a07d]/70">新增手搖</h4>
-                                            <div className="flex gap-2">
-                                                <input id="d-name" placeholder="飲料名" className="flex-1 p-2 rounded-lg border border-[#f2ece5] text-sm outline-none" />
-                                                <input id="d-amount" type="number" placeholder="金額" className="w-20 p-2 rounded-lg border border-[#f2ece5] text-sm outline-none" />
-                                            </div>
-                                            <button onClick={() => {
-                                                const n = document.getElementById('d-name').value;
-                                                const a = document.getElementById('d-amount').value;
-                                                if(n && a) { 
-                                                    saveRecord('drinks', {name: n, amount: a}); 
-                                                    document.getElementById('d-name').value=''; 
-                                                    document.getElementById('d-amount').value=''; 
-                                                }
-                                            }} className="w-full bg-[#c1a07d] text-white py-2 rounded-lg font-bold text-xs uppercase hover:bg-[#b08e6b]">確認新增</button>
-                                        </div>
-                                    </div>
+        function renderCol(title, items, key, renderFn, header = '', footer = '') {
+            return `
+                <div class="bg-[#f8f9fa] rounded-[3rem] p-7 border border-slate-100 shadow-sm flex flex-col min-h-[400px]">
+                    <h4 class="font-black text-[#b0bec5] mb-8 flex items-center justify-between text-[10px] uppercase tracking-[0.2em]">
+                        ${title}
+                        <span class="bg-white text-[#90a4ae] px-3 py-1 rounded-full border border-slate-100">${items.length}</span>
+                    </h4>
+                    ${header}
+                    <div class="space-y-5 flex-1">
+                        ${items.length === 0 ? `<div class="h-full flex flex-col items-center justify-center opacity-10 py-20 italic font-black tracking-widest">NO DATA</div>` : ''}
+                        ${items.map((item, i) => `
+                            <div class="group relative bg-white border border-slate-100 p-5 rounded-[2rem] hover:shadow-lg transition-all hover:-translate-y-1">
+                                ${renderFn(item)}
+                                <div class="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                    <button onclick="editRecord('${key}', ${i})" class="bg-[#91a5b8] text-white w-7 h-7 flex items-center justify-center rounded-full shadow-lg text-xs">✎</button>
+                                    <button onclick="deleteRecord('${key}', ${i})" class="bg-[#e57373] text-white w-7 h-7 flex items-center justify-center rounded-full shadow-lg text-xs">✕</button>
                                 </div>
                             </div>
-                        </div>
-                    )}
-                </div>
-            );
-        };
-
-        const StatCard = ({ title, value, unit, color, bgColor, icon }) => (
-            <div className={`${bgColor} p-4 rounded-3xl flex flex-col border border-white/50 shadow-sm`}>
-                <div className="flex justify-between items-center mb-1">
-                    <span className="text-[9px] font-black text-slate-400 uppercase">{title}</span>
-                    <span className="text-sm">{icon}</span>
-                </div>
-                <div className={`text-xl font-black ${color}`}>{value.toLocaleString()}<span className="text-[10px] font-normal ml-0.5">{unit}</span></div>
-            </div>
-        );
-
-        const DetailCol = ({ title, items, render, onDelete }) => (
-            <div className="bg-[#f8f9fa] rounded-3xl p-5 border border-slate-100 flex flex-col min-h-[250px]">
-                <h5 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4 border-b border-slate-200 pb-2">{title}</h5>
-                <div className="space-y-2 flex-1">
-                    {items.map((item, i) => (
-                        <div key={i} className="bg-white p-3 rounded-xl border border-slate-50 shadow-sm relative group">
-                            {render(item)}
-                            <button onClick={() => onDelete(i)} className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 bg-red-400 text-white w-5 h-5 flex items-center justify-center rounded-full text-[10px]">✕</button>
-                        </div>
-                    ))}
-                    {items.length === 0 && <div className="text-[10px] text-slate-300 text-center py-10">尚無資料</div>}
-                </div>
-            </div>
-        );
-
-        const HealthBox = ({ title, value, unit, icon, color, onSave }) => {
-            const [val, setVal] = useState("");
-            return (
-                <div className={`${color} p-5 rounded-3xl text-white shadow-md`}>
-                    <div className="flex justify-between items-center mb-2">
-                        <span className="text-[9px] font-black uppercase opacity-70">{title}</span>
-                        <span>{icon}</span>
+                        `).join('')}
                     </div>
-                    <div className="text-2xl font-black mb-3">{value || "--"}<span className="text-[10px] opacity-50 ml-1">{unit}</span></div>
-                    <div className="flex gap-1">
-                        <input 
-                            type="number" 
-                            value={val} 
-                            onChange={e => setVal(e.target.value)} 
-                            placeholder="輸入" 
-                            className="w-full bg-white/10 border border-white/20 rounded-lg p-1.5 text-xs outline-none focus:bg-white/20" 
-                        />
-                        <button onClick={() => { if(val) { onSave(val); setVal(""); } }} className="bg-white text-slate-600 px-2 rounded-lg font-bold text-[10px]">OK</button>
+                    ${footer}
+                </div>
+            `;
+        }
+
+        // --- 表單邏輯 ---
+
+        function renderForms() {
+            const fTitle = document.getElementById('form-title');
+            fTitle.innerHTML = `
+                <div class="w-10 h-10 bg-[#91a5b8] text-white rounded-2xl flex items-center justify-center text-lg">${editingItem ? '✎' : '＋'}</div>
+                <span>${editingItem ? '修改紀錄' : '新增紀錄'}</span>
+            `;
+
+            const data = editingItem ? 
+                (editingItem.type === 'meals' ? records[selectedDateStr].meals[editingItem.index] : 
+                 editingItem.type === 'drinks' ? records[selectedDateStr].drinks[editingItem.index] :
+                 editingItem.type === 'exercise' ? records[selectedDateStr].exercise[editingItem.index] : {}) : {};
+
+            const container = document.getElementById('forms-container');
+            container.innerHTML = `
+                <!-- 飲食表單 -->
+                <div class="bg-white p-7 rounded-[3rem] border border-slate-100 space-y-4 shadow-sm hover:border-[#91a5b8]/30 transition-all">
+                    <div class="font-black text-xs text-[#546e7a] tracking-widest uppercase mb-2">MEAL ITEM</div>
+                    <select id="f-meal-type" class="w-full text-xs font-bold bg-[#f1f3f5] rounded-2xl p-4 outline-none">
+                        ${['breakfast', 'lunch', 'dinner', 'nightSnack', 'instantNoodles'].map(k => `<option value="${k}" ${data.type === k ? 'selected' : ''}>${CATEGORIES[k].label}</option>`).join('')}
+                    </select>
+                    <input id="f-meal-brand" placeholder="品牌 / 店家" class="w-full text-xs font-medium bg-[#f8f9fa] border border-slate-100 rounded-2xl p-4" value="${data.brand || ''}" />
+                    <input id="f-meal-name" placeholder="食物名稱 *" class="w-full text-xs font-bold bg-[#f8f9fa] border border-slate-100 rounded-2xl p-4" value="${data.name || ''}" />
+                    <input id="f-meal-amount" type="number" placeholder="金額 *" class="w-full text-xs font-bold bg-[#f8f9fa] border border-slate-100 rounded-2xl p-4" value="${data.amount || ''}" />
+                    <textarea id="f-meal-note" placeholder="備註..." class="w-full text-xs font-medium bg-[#f8f9fa] border border-slate-100 rounded-2xl p-4 h-24 resize-none">${data.note || ''}</textarea>
+                    <button onclick="submitMeal()" class="w-full bg-[#91a5b8] text-white text-xs font-black py-4 rounded-2xl shadow-lg hover:bg-[#7e8da1] transition-all uppercase tracking-widest">${editingItem?.type === 'meals' ? '更新' : '加入紀錄'}</button>
+                </div>
+
+                <!-- 飲料表單 -->
+                <div class="bg-[#fdfaf7] p-7 rounded-[3rem] border border-[#f2ece5] space-y-4 shadow-sm hover:border-[#c1a07d]/30 transition-all">
+                    <div class="font-black text-xs text-[#c1a07d] tracking-widest uppercase mb-2">DRINK</div>
+                    <input id="f-drink-brand" placeholder="品牌 / 店家" class="w-full text-xs font-medium bg-white border border-[#f2ece5] rounded-2xl p-4" value="${editingItem?.type === 'drinks' ? data.brand : ''}" />
+                    <input id="f-drink-name" placeholder="飲料名稱 *" class="w-full text-xs font-bold bg-white border border-[#f2ece5] rounded-2xl p-4" value="${editingItem?.type === 'drinks' ? data.name : ''}" />
+                    <div class="grid grid-cols-2 gap-3">
+                        <select id="f-drink-ice" class="text-[10px] font-black bg-white border border-[#f2ece5] rounded-2xl p-4 outline-none">
+                            ${ICE_OPTIONS.map(o => `<option value="${o}" ${editingItem?.type === 'drinks' && data.ice === o ? 'selected' : (o==='去冰'?'selected':'')}>${o}</option>`).join('')}
+                        </select>
+                        <select id="f-drink-sugar" class="text-[10px] font-black bg-white border border-[#f2ece5] rounded-2xl p-4 outline-none">
+                            ${SUGAR_OPTIONS.map(o => `<option value="${o}" ${editingItem?.type === 'drinks' && data.sugar === o ? 'selected' : (o==='無糖'?'selected':'')}>${o}</option>`).join('')}
+                        </select>
+                    </div>
+                    <input id="f-drink-amount" type="number" placeholder="金額 *" class="w-full text-xs font-bold bg-white border border-[#f2ece5] rounded-2xl p-4" value="${editingItem?.type === 'drinks' ? data.amount : ''}" />
+                    <textarea id="f-drink-note" placeholder="備註..." class="w-full text-xs font-medium bg-white border border-[#f2ece5] rounded-2xl p-4 h-24 resize-none">${editingItem?.type === 'drinks' ? data.note : ''}</textarea>
+                    <button onclick="submitDrink()" class="w-full bg-[#c1a07d] text-white text-xs font-black py-4 rounded-2xl shadow-lg hover:bg-[#a68a6b] transition-all uppercase tracking-widest">${editingItem?.type === 'drinks' ? '更新' : '加入紀錄'}</button>
+                </div>
+
+                <!-- 運動表單 -->
+                <div class="bg-[#f1f5f3] p-7 rounded-[3rem] border border-[#d1dbd6] space-y-4 shadow-sm">
+                    <div class="font-black text-xs text-[#4c5e56] tracking-widest uppercase mb-2">WORKOUT</div>
+                    <input id="f-ex-name" placeholder="運動項目 *" class="w-full text-xs font-bold bg-white border border-[#d1dbd6] rounded-2xl p-4" value="${editingItem?.type === 'exercise' ? data.name : ''}" />
+                    <input id="f-ex-loc" placeholder="地點" class="w-full text-xs font-medium bg-white border border-[#d1dbd6] rounded-2xl p-4" value="${editingItem?.type === 'exercise' ? data.location : ''}" />
+                    <input id="f-ex-time" placeholder="時長 / 強度" class="w-full text-xs font-medium bg-white border border-[#d1dbd6] rounded-2xl p-4" value="${editingItem?.type === 'exercise' ? data.time : ''}" />
+                    <textarea id="f-ex-note" placeholder="備註..." class="w-full text-xs font-medium bg-white border border-[#d1dbd6] rounded-2xl p-4 h-24 resize-none">${editingItem?.type === 'exercise' ? data.note : ''}</textarea>
+                    <button onclick="submitExercise()" class="w-full bg-[#8da69d] text-white text-xs font-black py-4 rounded-2xl shadow-lg hover:bg-[#6c857b] transition-all uppercase tracking-widest">${editingItem?.type === 'exercise' ? '更新' : '加入紀錄'}</button>
+                </div>
+
+                <!-- 健康表單 -->
+                <div class="space-y-6">
+                    <div class="bg-[#455a64] p-8 rounded-[3rem] shadow-lg border border-white/10">
+                        <div class="mb-4 text-[#b0bec5] font-black text-[10px] uppercase tracking-[0.2em]">WEIGHT RECORD</div>
+                        <input id="f-weight" type="number" step="0.1" placeholder="${records[selectedDateStr]?.weight || '--'} kg" class="bg-white/10 border-2 border-transparent focus:border-white/30 rounded-2xl text-white text-2xl font-black w-full p-4 outline-none" onblur="submitWeight(this.value)" />
+                    </div>
+                    <div class="bg-[#9eb8c0] p-8 rounded-[3rem] shadow-lg border border-white/10">
+                        <div class="mb-4 text-white font-black text-[10px] uppercase tracking-[0.2em]">WATER INTAKE</div>
+                        <input id="f-water" type="number" placeholder="${records[selectedDateStr]?.water || '--'} ml" class="bg-white/20 border-2 border-transparent focus:border-white/40 rounded-2xl text-white text-2xl font-black w-full p-4 outline-none placeholder:text-white/50" onblur="submitWater(this.value)" />
                     </div>
                 </div>
-            );
-        };
+            `;
+        }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        // --- 提交邏輯 ---
+
+        function ensureDate(d) {
+            if(!records[d]) records[d] = { meals: [], drinks: [], fruits: [], exercise: [], weight: '', water: 0 };
+        }
+
+        function submitMeal() {
+            const name = document.getElementById('f-meal-name').value;
+            const amount = document.getElementById('f-meal-amount').value;
+            if(!name || !amount) return;
+            ensureDate(selectedDateStr);
+            const data = {
+                type: document.getElementById('f-meal-type').value,
+                brand: document.getElementById('f-meal-brand').value,
+                name: name,
+                amount: amount,
+                note: document.getElementById('f-meal-note').value
+            };
+            if(editingItem?.type === 'meals') records[selectedDateStr].meals[editingItem.index] = data;
+            else records[selectedDateStr].meals.push(data);
+            editingItem = null;
+            saveAndRefresh();
+        }
+
+        function submitDrink() {
+            const name = document.getElementById('f-drink-name').value;
+            const amount = document.getElementById('f-drink-amount').value;
+            if(!name || !amount) return;
+            ensureDate(selectedDateStr);
+            const data = {
+                brand: document.getElementById('f-drink-brand').value,
+                name: name,
+                ice: document.getElementById('f-drink-ice').value,
+                sugar: document.getElementById('f-drink-sugar').value,
+                amount: amount,
+                note: document.getElementById('f-drink-note').value
+            };
+            if(editingItem?.type === 'drinks') records[selectedDateStr].drinks[editingItem.index] = data;
+            else records[selectedDateStr].drinks.push(data);
+            editingItem = null;
+            saveAndRefresh();
+        }
+
+        function submitExercise() {
+            const name = document.getElementById('f-ex-name').value;
+            if(!name) return;
+            ensureDate(selectedDateStr);
+            const data = {
+                name: name,
+                location: document.getElementById('f-ex-loc').value,
+                time: document.getElementById('f-ex-time').value,
+                note: document.getElementById('f-ex-note').value
+            };
+            if(editingItem?.type === 'exercise') records[selectedDateStr].exercise[editingItem.index] = data;
+            else records[selectedDateStr].exercise.push(data);
+            editingItem = null;
+            saveAndRefresh();
+        }
+
+        function submitWeight(v) {
+            if(!v) return;
+            ensureDate(selectedDateStr);
+            records[selectedDateStr].weight = v;
+            saveAndRefresh();
+        }
+
+        function submitWater(v) {
+            if(!v) return;
+            ensureDate(selectedDateStr);
+            records[selectedDateStr].water = parseInt(v);
+            saveAndRefresh();
+        }
+
+        function deleteRecord(key, index) {
+            records[selectedDateStr][key].splice(index, 1);
+            saveAndRefresh();
+        }
+
+        function editRecord(key, index) {
+            editingItem = { type: key, index: index };
+            renderForms();
+            document.getElementById('modal').scrollTo({ top: 1000, behavior: 'smooth' });
+        }
+
+        window.onload = init;
     </script>
 </body>
 </html>
