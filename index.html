@@ -2,582 +2,301 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2026 吃吃喝喝統計表</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>2026 吃吃喝喝統計表 - Mobile Optimized</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
         body {
             font-family: 'Noto Sans TC', sans-serif;
-            background-color: #f0f2f5;
+            background-color: #f4f6f8;
             color: #546e7a;
+            -webkit-tap-highlight-color: transparent;
         }
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
         }
-        .hide-scrollbar::-webkit-scrollbar {
-            display: none;
+        .calendar-cell {
+            aspect-ratio: 1 / 1.1; /* 讓格子接近正方形，稍微保留一點空間給標籤 */
         }
-        .hide-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-        input::-webkit-outer-spin-button,
-        input::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(255,255,255,0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
         }
     </style>
 </head>
-<body class="p-4 md:p-8">
+<body class="p-3 md:p-8">
 
-    <div class="max-w-7xl mx-auto space-y-8">
-        <!-- 頂部統計卡片 -->
-        <div class="bg-white rounded-[2.5rem] p-8 md:p-10 shadow-sm border border-slate-200/50">
-            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-10">
+    <div id="loading" class="loading-overlay">
+        <div class="flex flex-col items-center gap-4">
+            <div class="w-10 h-10 border-4 border-[#91a5b8] border-t-transparent rounded-full animate-spin"></div>
+            <p class="font-black text-[#91a5b8] text-sm tracking-widest">資料同步中...</p>
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto space-y-4">
+        <!-- 頂部資訊與統計 -->
+        <div class="bg-white rounded-[2rem] p-5 md:p-8 shadow-sm border border-slate-200/60">
+            <div class="flex justify-between items-center mb-6">
                 <div>
-                    <h1 class="text-4xl font-black text-[#455a64] tracking-tight mb-2">2026 吃吃喝喝</h1>
-                    <p class="text-sm text-[#90a4ae] font-bold italic">我吃故我在</p>
+                    <h1 class="text-2xl font-black text-[#455a64] tracking-tight">2026 紀錄</h1>
+                    <p class="text-[10px] text-[#b0bec5] font-bold uppercase tracking-tighter">Cloud Sync Active</p>
                 </div>
                 <div id="month-picker-main"></div>
             </div>
 
-            <!-- 統計卡片 (無圖示版本) -->
-            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-12" id="stats-container">
-                <!-- 由 JS 渲染 -->
-            </div>
+            <!-- 縮窄後的統計欄位 -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" id="stats-container"></div>
 
-            <div class="pt-10 border-t border-slate-100 space-y-8">
-                <div class="flex flex-col md:flex-row items-start md:items-center gap-4">
-                    <span class="text-[10px] font-black text-[#90a4ae] uppercase tracking-widest">統計計入類別：</span>
-                    <div class="flex flex-wrap gap-2" id="config-container">
-                        <!-- 由 JS 渲染 -->
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="favorites-container">
-                    <!-- 由 JS 渲染 -->
-                </div>
+            <div class="pt-5 border-t border-slate-100">
+                <div class="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar pb-2" id="config-container"></div>
+                <div class="grid grid-cols-1 gap-3" id="favorites-container"></div>
             </div>
         </div>
 
-        <!-- 月曆區塊 -->
-        <div class="bg-white rounded-[2.5rem] shadow-sm border border-slate-200/50 p-8 space-y-6">
-            <div class="flex items-center justify-between">
+        <!-- 優化後的方型月曆 -->
+        <div class="bg-white rounded-[2rem] shadow-sm border border-slate-200/60 p-4 space-y-4">
+            <div class="flex items-center justify-between px-1">
                 <div id="month-picker-calendar"></div>
-                <div class="text-[10px] font-bold text-[#b0bec5] uppercase tracking-widest">Calendar View</div>
+                <span class="text-[9px] font-black text-[#cfd8dc] uppercase tracking-[0.2em]">Calendar</span>
             </div>
             <div id="calendar-view"></div>
         </div>
     </div>
 
-    <!-- 詳情 Modal -->
-    <div id="modal" class="fixed inset-0 bg-[#263238]/40 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-[3.5rem] shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
-            <div class="p-8 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white/80 backdrop-blur-md z-10">
-                <div class="flex items-center gap-4">
-                    <button onclick="shiftSelectedDate(-1)" class="p-3 hover:bg-slate-50 rounded-full text-[#b0bec5] font-bold">❮</button>
-                    <h2 id="modal-date-title" class="text-3xl font-black text-[#455a64] tracking-tight"></h2>
-                    <button onclick="shiftSelectedDate(1)" class="p-3 hover:bg-slate-50 rounded-full text-[#b0bec5] font-bold">❯</button>
+    <!-- Modal 保持不變但優化手機端內距 -->
+    <div id="modal" class="fixed inset-0 bg-[#263238]/40 backdrop-blur-md z-50 hidden flex items-center justify-center p-2">
+        <div class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-white/80 sticky top-0 z-10">
+                <div class="flex items-center gap-2">
+                    <button onclick="shiftSelectedDate(-1)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-50 rounded-full text-[#b0bec5]">❮</button>
+                    <h2 id="modal-date-title" class="text-xl font-black text-[#455a64]"></h2>
+                    <button onclick="shiftSelectedDate(1)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-50 rounded-full text-[#b0bec5]">❯</button>
                 </div>
-                <button onclick="closeModal()" class="p-4 hover:bg-[#ffebee] hover:text-[#e57373] rounded-full transition-all text-[#b0bec5] text-2xl">✕</button>
+                <button onclick="closeModal()" class="w-10 h-10 flex items-center justify-center bg-slate-50 rounded-full text-[#b0bec5]">✕</button>
             </div>
-            
-            <div class="flex-1 overflow-y-auto p-8 space-y-12 hide-scrollbar">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8" id="record-columns">
-                    <!-- 由 JS 渲染 -->
-                </div>
-
-                <div class="pt-12 border-t border-slate-100">
-                    <h3 id="form-title" class="text-xl font-black text-[#455a64] mb-8 flex items-center gap-3">
-                        <div class="w-10 h-10 bg-[#91a5b8] text-white rounded-2xl flex items-center justify-center text-lg">＋</div>
-                        <span>新增紀錄</span>
-                    </h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8" id="forms-container">
-                        <!-- 由 JS 渲染 -->
-                    </div>
+            <div class="flex-1 overflow-y-auto p-6 space-y-8 hide-scrollbar pb-20">
+                <div class="space-y-4" id="record-columns"></div>
+                <div class="pt-8 border-t border-slate-100">
+                    <h3 class="text-sm font-black text-[#90a4ae] mb-6 uppercase tracking-widest">新增/修改項目</h3>
+                    <div class="grid grid-cols-1 gap-4" id="forms-container"></div>
                 </div>
             </div>
         </div>
     </div>
 
-    <script>
-        // --- 核心資料與狀態 ---
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'diet-app-2026';
+
+        let records = {};
+        let statsConfig = { breakfast: true, lunch: true, dinner: true, nightSnack: true, instantNoodles: true, drinks: true };
         let currentDate = new Date(2026, 0, 1);
         let selectedDateStr = null;
-        let editingItem = null; // { type, index }
-
-        let records = JSON.parse(localStorage.getItem('diet_records_2026_html_v2')) || {};
-        let statsConfig = {
-            breakfast: true, lunch: true, dinner: true, nightSnack: true, instantNoodles: true, drinks: true
-        };
+        let editingItem = null;
+        let currentUser = null;
 
         const CATEGORIES = {
-            breakfast: { label: '早餐', tag: '食' },
-            lunch: { label: '午餐', tag: '食' },
-            dinner: { label: '晚餐', tag: '食' },
-            nightSnack: { label: '宵夜', tag: '食' },
-            instantNoodles: { label: '泡麵', tag: '食' },
-            drinks: { label: '手搖', tag: '飲' },
-            fruits: { label: '水果', tag: '食' },
-            water: { label: '飲水', tag: '水' },
-            exercise: { label: '運動', tag: '動' },
-            weight: { label: '體重', tag: '重' }
+            breakfast: { label: '早', tag: '食' },
+            lunch: { label: '午', tag: '食' },
+            dinner: { label: '晚', tag: '食' },
+            nightSnack: { label: '宵', tag: '食' },
+            instantNoodles: { label: '泡', tag: '食' },
+            drinks: { label: '飲', tag: '飲' },
+            exercise: { label: '動', tag: '動' },
+            weight: { label: '重', tag: '重' }
         };
 
-        const ICE_OPTIONS = ['正常冰', '少冰', '微冰', '去冰', '完全不冰', '無法調整'];
-        const SUGAR_OPTIONS = ['正常甜', '少糖', '半糖', '微糖', '無糖', '無法調整'];
-
-        // --- 初始化 ---
-        function init() {
-            renderAll();
+        // 初始化
+        async function initApp() {
+            try {
+                await signInAnonymously(auth);
+                onAuthStateChanged(auth, (user) => { if (user) { currentUser = user; setupSync(); } });
+            } catch (e) { document.getElementById('loading').innerText = "連線失敗"; }
         }
 
-        function saveAndRefresh() {
-            localStorage.setItem('diet_records_2026_html_v2', JSON.stringify(records));
-            renderAll();
-            if (selectedDateStr) renderModalContent();
+        function setupSync() {
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'all_records');
+            onSnapshot(docRef, (snapshot) => {
+                if (snapshot.exists()) records = snapshot.data().content || {};
+                document.getElementById('loading').classList.add('hidden');
+                renderAll();
+                if (selectedDateStr) renderModalContent();
+            });
         }
+
+        async function sync() {
+            if (!currentUser) return;
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'all_records'), { content: records });
+        }
+
+        // 渲染統計卡片 (縮窄版)
+        function renderStats() {
+            const s = calculateStats();
+            document.getElementById('stats-container').innerHTML = `
+                ${statCard('月累計', s.monthlySpend, '$', 'bg-[#e9eff5]', 'text-[#91a5b8]')}
+                ${statCard('年累計', s.yearlySpend, '$', 'bg-[#f1f3f5]', 'text-[#7e8a97]')}
+                ${statCard('月杯數', s.monthlyCups, '杯', 'bg-[#f7f3ef]', 'text-[#c1a07d]')}
+                ${statCard('年杯數', s.yearlyCups, '杯', 'bg-[#f8f9fa]', 'text-[#90a4ae]')}
+            `;
+        }
+
+        function statCard(t, v, u, bg, tc) {
+            return `<div class="${bg} p-4 rounded-2xl border border-white/60 shadow-sm"><p class="text-[9px] font-black text-[#b0bec5] mb-1">${t}</p><p class="text-lg font-black ${tc}">${v.toLocaleString()}<span class="text-[10px] opacity-40 ml-1 font-normal">${u}</span></p></div>`;
+        }
+
+        // 渲染月曆 (方形 & 小標籤)
+        function renderCalendar() {
+            const y = currentDate.getFullYear();
+            const m = currentDate.getMonth();
+            const daysInMonth = new Date(y, m + 1, 0).getDate();
+            const firstDay = new Date(y, m, 1).getDay();
+            
+            let html = `<div class="calendar-grid border-l border-t border-slate-100 rounded-xl overflow-hidden shadow-sm">`;
+            ['日','一','二','三','四','五','六'].forEach(d => {
+                html += `<div class="bg-[#f8f9fa] py-2 text-center text-[9px] font-bold text-[#cfd8dc] border-r border-b border-slate-100">${d}</div>`;
+            });
+
+            for (let i = 0; i < firstDay; i++) html += `<div class="calendar-cell border-r border-b border-slate-50 bg-slate-50/10"></div>`;
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const data = records[dateStr];
+                const isToday = d === new Date().getDate() && m === new Date().getMonth() && y === new Date().getFullYear();
+                
+                html += `
+                    <div onclick="openModal('${dateStr}')" class="calendar-cell border-r border-b border-slate-100 p-1.5 cursor-pointer hover:bg-slate-50 bg-white relative">
+                        <span class="text-[10px] font-black ${isToday ? 'bg-[#91a5b8] text-white w-5 h-5 flex items-center justify-center rounded-md' : 'text-[#b0bec5]'}">${d}</span>
+                        <div class="flex flex-wrap gap-0.5 mt-1.5">
+                            ${data?.meals?.length > 0 ? `<div class="w-1.5 h-1.5 rounded-full bg-[#91a5b8]"></div>` : ''}
+                            ${data?.drinks?.length > 0 ? `<div class="w-1.5 h-1.5 rounded-full bg-[#c1a07d]"></div>` : ''}
+                            ${data?.exercise?.length > 0 ? `<div class="w-1.5 h-1.5 rounded-full bg-[#8da69d]"></div>` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+            document.getElementById('calendar-view').innerHTML = html + `</div>`;
+        }
+
+        // 其餘邏輯
+        function calculateStats() {
+            let mS = 0, yS = 0, mC = 0, yC = 0;
+            const mK = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+            Object.entries(records).forEach(([date, data]) => {
+                const isM = date.startsWith(mK);
+                const dS = (data.meals?.reduce((a, m) => a + (statsConfig[m.type] ? (parseInt(m.amount) || 0) : 0), 0) || 0) + (data.drinks?.reduce((a, d) => a + (statsConfig.drinks ? (parseInt(d.amount) || 0) : 0), 0) || 0);
+                if (isM) { mS += dS; mC += (data.drinks?.length || 0); }
+                yS += dS; yC += (data.drinks?.length || 0);
+            });
+            return { monthlySpend: mS, yearlySpend: yS, monthlyCups: mC, yearlyCups: yC };
+        }
+
+        function renderMonthPickers() {
+            const h = `
+                <div class="flex items-center gap-1 bg-[#f1f3f5] p-1 rounded-xl border border-slate-200">
+                    <button onclick="changeMonth(-1)" class="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-sm text-xs text-[#90a4ae]">❮</button>
+                    <span class="text-xs font-black px-2 min-w-[80px] text-center text-[#546e7a]">${currentDate.getFullYear()}/${currentDate.getMonth() + 1}</span>
+                    <button onclick="changeMonth(1)" class="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-sm text-xs text-[#90a4ae]">❯</button>
+                </div>
+            `;
+            document.getElementById('month-picker-main').innerHTML = h;
+            document.getElementById('month-picker-calendar').innerHTML = h;
+        }
+
+        function renderConfig() {
+            document.getElementById('config-container').innerHTML = ['breakfast', 'lunch', 'dinner', 'drinks'].map(k => `
+                <button onclick="toggleConfig('${k}')" class="whitespace-nowrap px-4 py-2 rounded-xl text-[10px] font-black transition-all border ${statsConfig[k] ? 'bg-[#91a5b8] border-[#91a5b8] text-white' : 'bg-white border-slate-200 text-[#b0bec5]'}">
+                    ${CATEGORIES[k].label}
+                </button>
+            `).join('');
+        }
+
+        window.openModal = (d) => { selectedDateStr = d; document.getElementById('modal').classList.remove('hidden'); renderModalContent(); };
+        window.closeModal = () => { selectedDateStr = null; document.getElementById('modal').classList.add('hidden'); };
+        window.changeMonth = (o) => { currentDate.setMonth(currentDate.getMonth() + o); renderAll(); };
+        window.toggleConfig = (k) => { statsConfig[k] = !statsConfig[k]; renderAll(); };
+        window.shiftSelectedDate = (o) => {
+            const d = new Date(selectedDateStr); d.setDate(d.getDate() + o);
+            selectedDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            if(d.getMonth() !== currentDate.getMonth()) { currentDate = new Date(d.getFullYear(), d.getMonth(), 1); renderAll(); }
+            renderModalContent();
+        };
+
+        function renderModalContent() {
+            document.getElementById('modal-date-title').innerText = selectedDateStr;
+            const data = records[selectedDateStr] || { meals: [], drinks: [], exercise: [] };
+            document.getElementById('record-columns').innerHTML = `
+                <div class="bg-slate-50 p-5 rounded-[2rem] space-y-3">
+                    <p class="text-[9px] font-black text-[#b0bec5] uppercase tracking-widest mb-2">明細</p>
+                    ${[...data.meals, ...data.drinks].map((m, i) => `
+                        <div class="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm">
+                            <div>
+                                <span class="text-[9px] font-bold text-[#91a5b8] uppercase">${m.type ? CATEGORIES[m.type].label : '飲'}</span>
+                                <p class="text-sm font-black text-[#455a64]">${m.name}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm font-black text-[#91a5b8]">$${m.amount}</p>
+                                <button onclick="deleteRec('${m.type ? 'meals' : 'drinks'}', ${i})" class="text-[9px] text-red-300 font-bold uppercase mt-1">Delete</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            renderForms();
+        }
+
+        function renderForms() {
+            document.getElementById('forms-container').innerHTML = `
+                <div class="grid grid-cols-2 gap-3">
+                    <input id="f-name" placeholder="名稱" class="col-span-2 bg-slate-50 rounded-xl p-4 text-sm font-bold outline-none border border-transparent focus:border-[#91a5b8]" />
+                    <input id="f-amount" type="number" placeholder="金額" class="bg-slate-50 rounded-xl p-4 text-sm font-bold outline-none border border-transparent focus:border-[#91a5b8]" />
+                    <select id="f-type" class="bg-slate-50 rounded-xl p-4 text-sm font-bold outline-none border border-transparent focus:border-[#91a5b8]">
+                        <option value="lunch">午餐</option><option value="dinner">晚餐</option><option value="drinks">手搖</option><option value="breakfast">早餐</option>
+                    </select>
+                    <button onclick="addRec()" class="col-span-2 bg-[#455a64] text-white font-black py-4 rounded-xl shadow-lg active:scale-95 transition-all">確認加入</button>
+                </div>
+            `;
+        }
+
+        window.addRec = async () => {
+            const n = document.getElementById('f-name').value;
+            const a = document.getElementById('f-amount').value;
+            const t = document.getElementById('f-type').value;
+            if(!n || !a) return;
+            if(!records[selectedDateStr]) records[selectedDateStr] = { meals: [], drinks: [], exercise: [] };
+            if(t === 'drinks') records[selectedDateStr].drinks.push({ name: n, amount: a });
+            else records[selectedDateStr].meals.push({ name: n, amount: a, type: t });
+            await sync();
+        };
+
+        window.deleteRec = async (k, i) => { records[selectedDateStr][k].splice(i, 1); await sync(); };
 
         function renderAll() {
             renderMonthPickers();
             renderStats();
             renderConfig();
-            renderFavorites();
             renderCalendar();
+            // Favorites 可依需求簡化或保留，此處先隱藏確保空間
+            document.getElementById('favorites-container').innerHTML = '';
         }
 
-        // --- UI 渲染邏輯 ---
-
-        function renderMonthPickers() {
-            const html = `
-                <div class="flex items-center gap-2 bg-[#f1f3f5] p-1.5 rounded-2xl w-fit border border-slate-200 px-4 py-2">
-                    <button onclick="changeMonth(-1)" class="p-2 hover:bg-white rounded-xl transition-all shadow-sm text-[#78909c] font-bold">❮</button>
-                    <span class="text-sm font-black text-[#546e7a] min-w-[100px] text-center">
-                        ${currentDate.getFullYear()} 年 ${currentDate.getMonth() + 1} 月
-                    </span>
-                    <button onclick="changeMonth(1)" class="p-2 hover:bg-white rounded-xl transition-all shadow-sm text-[#78909c] font-bold">❯</button>
-                </div>
-            `;
-            document.getElementById('month-picker-main').innerHTML = html;
-            document.getElementById('month-picker-calendar').innerHTML = html;
-        }
-
-        function changeMonth(offset) {
-            currentDate.setMonth(currentDate.getMonth() + offset);
-            renderAll();
-        }
-
-        function renderStats() {
-            const s = calculateStats();
-            const container = document.getElementById('stats-container');
-            container.innerHTML = `
-                ${statCardHTML('當月累計消費', s.monthlySpend, '$', 'text-[#91a5b8]', 'bg-[#e9eff5]')}
-                ${statCardHTML('當年累計消費', s.yearlySpend, '$', 'text-[#7e8a97]', 'bg-[#f1f3f5]')}
-                ${statCardHTML('當月累計杯數', s.monthlyCups, '杯', 'text-[#c1a07d]', 'bg-[#f7f3ef]')}
-                ${statCardHTML('當年累計杯數', s.yearlyCups, '杯', 'text-[#90a4ae]', 'bg-[#f8f9fa]')}
-            `;
-        }
-
-        function statCardHTML(title, value, unit, color, bgColor) {
-            return `
-                <div class="${bgColor} border border-white/50 p-8 rounded-[2.5rem] flex flex-col gap-1 shadow-sm transition-transform hover:scale-[1.02]">
-                    <p class="text-[10px] font-black text-[#90a4ae] uppercase tracking-[0.2em] mb-2">${title}</p>
-                    <p class="text-3xl font-black ${color}">
-                        ${value.toLocaleString()} 
-                        <span class="text-sm font-normal opacity-40 ml-1.5">${unit}</span>
-                    </p>
-                </div>
-            `;
-        }
-
-        function renderConfig() {
-            const container = document.getElementById('config-container');
-            container.innerHTML = ['breakfast', 'lunch', 'dinner', 'nightSnack', 'instantNoodles', 'drinks'].map(key => `
-                <label class="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black cursor-pointer transition-all border ${statsConfig[key] ? 'bg-[#91a5b8] border-[#91a5b8] text-white shadow-md shadow-[#91a5b8]/10' : 'bg-white border-slate-200 text-[#90a4ae] hover:border-[#91a5b8]'}">
-                    <input type="checkbox" class="hidden" ${statsConfig[key] ? 'checked' : ''} onchange="toggleConfig('${key}')">
-                    ${CATEGORIES[key].label}
-                </label>
-            `).join('');
-        }
-
-        function toggleConfig(key) {
-            statsConfig[key] = !statsConfig[key];
-            renderAll();
-        }
-
-        function renderFavorites() {
-            const s = calculateStats();
-            const container = document.getElementById('favorites-container');
-            container.innerHTML = `
-                <div class="space-y-4">
-                    ${favHTML('本月最愛飲品', s.topDrinkMonth, '飲', 'text-[#c1a07d]', 'bg-[#fdfaf7]')}
-                    ${favHTML('本月最愛吃', s.topMealMonth, '食', 'text-[#71869d]', 'bg-[#f8fafb]')}
-                </div>
-                <div class="space-y-4">
-                    ${favHTML('今年最愛飲品', s.topDrinkYear, '飲', 'text-[#90a4ae]', 'bg-[#f8f9fa]')}
-                    ${favHTML('今年最愛吃', s.topMealYear, '食', 'text-[#90a4ae]', 'bg-[#f8f9fa]')}
-                </div>
-            `;
-        }
-
-        function favHTML(label, data, tag, color, bgColor) {
-            return `
-                <div class="${bgColor} p-5 rounded-3xl flex items-center justify-between border border-slate-100 shadow-sm">
-                    <span class="text-[10px] font-black text-[#90a4ae] uppercase tracking-[0.2em] flex items-center gap-2">
-                        <span class="w-6 h-6 bg-white rounded-lg flex items-center justify-center border border-slate-200">${tag}</span> ${label}
-                    </span>
-                    <div class="flex flex-col items-end gap-1 max-w-[65%]">
-                        <span class="text-sm font-black text-right break-words leading-tight ${color}">${data.text}</span>
-                        ${data.count > 0 ? `<span class="text-[10px] font-black bg-white/50 text-[#90a4ae] px-2 py-0.5 rounded-lg border border-slate-200">共 ${data.count} ${data.unit}</span>` : ''}
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderCalendar() {
-            const container = document.getElementById('calendar-view');
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth();
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
-            const firstDay = new Date(year, month, 1).getDay();
-            
-            let html = `
-                <div class="calendar-grid border-l border-t border-slate-200 rounded-[1.5rem] overflow-hidden shadow-sm">
-                    ${['日', '一', '二', '三', '四', '五', '六'].map(d => `
-                        <div class="bg-[#f8f9fa] py-3 text-center text-[10px] font-bold text-[#b0bec5] border-r border-b border-slate-200 tracking-widest uppercase">${d}</div>
-                    `).join('')}
-            `;
-
-            for (let i = 0; i < firstDay; i++) {
-                html += `<div class="h-32 border-r border-b border-slate-100 bg-slate-50/20"></div>`;
-            }
-
-            for (let d = 1; d <= daysInMonth; d++) {
-                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                const data = records[dateStr];
-                const isToday = d === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
-
-                html += `
-                    <div onclick="openModal('${dateStr}')" class="h-32 border-r border-b border-slate-100 p-2 cursor-pointer hover:bg-[#f4f7f9] transition-all relative bg-white">
-                        <span class="text-xs font-bold w-6 h-6 flex items-center justify-center rounded-lg ${isToday ? 'bg-[#91a5b8] text-white shadow-lg' : 'text-[#90a4ae]'}">${d}</span>
-                        <div class="flex flex-wrap gap-1.5 mt-3">
-                            ${data?.meals?.length > 0 ? `<span class="text-sm font-black bg-[#e9eff5] text-[#91a5b8] px-2 py-0.5 rounded-lg border-2 border-[#d1dce7]">食</span>` : ''}
-                            ${data?.drinks?.length > 0 ? `<span class="text-sm font-black bg-[#f7f3ef] text-[#c7b198] px-2 py-0.5 rounded-lg border-2 border-[#f2ece5]">飲</span>` : ''}
-                            ${data?.exercise?.length > 0 ? `<span class="text-sm font-black bg-[#f1f5f3] text-[#8da69d] px-2 py-0.5 rounded-lg border-2 border-[#d1dbd6]">動</span>` : ''}
-                        </div>
-                        <div class="absolute bottom-2 left-2 right-2 flex flex-col items-start gap-1">
-                            ${data?.water > 0 ? `<div class="text-[10px] font-black text-[#718d96] bg-[#eef5f7] px-1.5 rounded">${data.water}ml</div>` : ''}
-                            ${data?.weight ? `<div class="text-[10px] font-black text-[#90a4ae] bg-slate-100 px-1.5 rounded">${data.weight}kg</div>` : ''}
-                        </div>
-                    </div>
-                `;
-            }
-            html += `</div>`;
-            container.innerHTML = html;
-        }
-
-        // --- 統計計算 ---
-        function calculateStats() {
-            let mSpend = 0, ySpend = 0, mCups = 0, yCups = 0;
-            let dFreq = { m: {}, y: {} }, mFreq = { m: {}, y: {} };
-            const mKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-            const yKey = `${currentDate.getFullYear()}`;
-
-            Object.entries(records).forEach(([date, data]) => {
-                const isM = date.startsWith(mKey);
-                const isY = date.startsWith(yKey);
-                
-                const dSpend = (data.meals?.reduce((acc, m) => acc + (statsConfig[m.type] ? (parseInt(m.amount) || 0) : 0), 0) || 0) +
-                              (data.drinks?.reduce((acc, d) => acc + (statsConfig.drinks ? (parseInt(d.amount) || 0) : 0), 0) || 0);
-                
-                if (isM) { mSpend += dSpend; mCups += (data.drinks?.length || 0); }
-                if (isY) { ySpend += dSpend; yCups += (data.drinks?.length || 0); }
-
-                data.drinks?.forEach(d => {
-                    const k = `${d.brand} ${d.name}`.trim() || '未命名';
-                    if(isM) dFreq.m[k] = (dFreq.m[k] || 0) + 1;
-                    if(isY) dFreq.y[k] = (dFreq.y[k] || 0) + 1;
-                });
-                data.meals?.forEach(m => {
-                    if (statsConfig[m.type]) {
-                        const k = `${m.brand} ${m.name}`.trim() || '未命名';
-                        if(isM) mFreq.m[k] = (mFreq.m[k] || 0) + 1;
-                        if(isY) mFreq.y[k] = (mFreq.y[k] || 0) + 1;
-                    }
-                });
-            });
-
-            const getTop = (f, u) => {
-                const ent = Object.entries(f);
-                if (!ent.length) return { text: '無數據', count: 0, unit: u };
-                const max = Math.max(...ent.map(e => e[1]));
-                return { text: ent.filter(e => e[1] === max).map(e => e[0]).join(', '), count: max, unit: u };
-            };
-
-            return { monthlySpend: mSpend, yearlySpend: ySpend, monthlyCups: mCups, yearlyCups: yCups,
-                topDrinkMonth: getTop(dFreq.m, '杯'), topDrinkYear: getTop(dFreq.y, '杯'),
-                topMealMonth: getTop(mFreq.m, '次'), topMealYear: getTop(mFreq.y, '次')
-            };
-        }
-
-        // --- Modal & 詳情控制 ---
-
-        function openModal(dateStr) {
-            selectedDateStr = dateStr;
-            editingItem = null;
-            document.getElementById('modal').classList.remove('hidden');
-            renderModalContent();
-        }
-
-        function closeModal() {
-            document.getElementById('modal').classList.add('hidden');
-            selectedDateStr = null;
-            editingItem = null;
-        }
-
-        function shiftSelectedDate(offset) {
-            const d = new Date(selectedDateStr);
-            d.setDate(d.getDate() + offset);
-            selectedDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-            if (d.getMonth() !== currentDate.getMonth()) {
-                currentDate = new Date(d.getFullYear(), d.getMonth(), 1);
-                renderAll();
-            }
-            editingItem = null;
-            renderModalContent();
-        }
-
-        function renderModalContent() {
-            document.getElementById('modal-date-title').innerText = selectedDateStr;
-            const data = records[selectedDateStr] || { meals: [], drinks: [], fruits: [], exercise: [], weight: '', water: 0 };
-            
-            const colContainer = document.getElementById('record-columns');
-            colContainer.innerHTML = `
-                ${renderCol('飲食清單', data.meals, 'meals', m => `
-                    <div class="space-y-2">
-                        <div class="flex justify-between items-start">
-                            <div class="space-y-1">
-                                <span class="text-[10px] font-black px-2 py-0.5 rounded-lg border uppercase ${m.type === 'instantNoodles' ? 'bg-[#fbe9e7] border-[#ffccbc] text-[#d84315]' : 'bg-[#e9eff5] border-[#d1dce7] text-[#546e7a]'}">${CATEGORIES[m.type].label}</span>
-                                <div class="text-base font-black text-[#455a64]">${m.brand ? `<span class="text-[#91a5b8] mr-1">[${m.brand}]</span>` : ''}${m.name}</div>
-                            </div>
-                            <span class="text-lg font-black text-[#71869d]">$${m.amount}</span>
-                        </div>
-                        ${m.note ? `<div class="text-xs text-slate-400 p-2 bg-slate-50 rounded-xl border border-slate-100 mt-1">● ${m.note}</div>` : ''}
-                    </div>
-                `)}
-                ${renderCol('手搖飲', data.drinks, 'drinks', d => `
-                    <div class="space-y-3">
-                        <div class="flex justify-between font-black text-[#455a64]">
-                            <span class="text-base">${d.brand ? `<span class="text-[#c1a07d] mr-1">[${d.brand}]</span>` : ''}${d.name}</span>
-                            <span class="text-[#c1a07d] text-lg">$${d.amount}</span>
-                        </div>
-                        <div class="flex gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                            <span class="bg-[#f7f3ef] px-2 py-0.5 rounded-lg border border-[#f2ece5]">${d.ice}</span>
-                            <span class="bg-[#f7f3ef] px-2 py-0.5 rounded-lg border border-[#f2ece5]">${d.sugar}</span>
-                        </div>
-                        ${d.note ? `<div class="text-xs text-slate-400 p-2 bg-slate-50 rounded-xl border border-slate-100">● ${d.note}</div>` : ''}
-                    </div>
-                `)}
-                ${renderCol('生活與運動', data.exercise, 'exercise', e => `
-                    <div class="space-y-1">
-                        <div class="text-base font-black text-[#455a64] flex items-center gap-2">
-                           <div class="w-8 h-8 bg-[#f1f5f3] rounded-xl text-[#8da69d] flex items-center justify-center text-xs">動</div>
-                           ${e.name} ${e.time ? `<span class="text-xs font-normal text-slate-400">(${e.time})</span>` : ''}
-                        </div>
-                        ${e.location ? `<div class="text-xs text-[#90a4ae] ml-10 italic">${e.location}</div>` : ''}
-                    </div>
-                `, 
-                data.weight ? `<div class="mb-4 p-5 bg-[#455a64] rounded-3xl flex items-center justify-between text-white shadow-lg border border-white/10"><div class="font-black text-[10px] tracking-widest opacity-70">WEIGHT</div><span class="text-2xl font-black">${data.weight} <small class="text-xs opacity-50">kg</small></span></div>` : '',
-                data.water > 0 ? `<div class="mt-4 p-5 bg-[#9eb8c0] rounded-3xl flex items-center justify-between text-white shadow-lg border border-white/10"><div class="font-black text-[10px] tracking-widest opacity-80">WATER</div><span class="text-2xl font-black">${data.water} <small class="text-xs opacity-50">ml</small></span></div>` : ''
-                )}
-            `;
-
-            renderForms();
-        }
-
-        function renderCol(title, items, key, renderFn, header = '', footer = '') {
-            return `
-                <div class="bg-[#f8f9fa] rounded-[3rem] p-7 border border-slate-100 shadow-sm flex flex-col min-h-[400px]">
-                    <h4 class="font-black text-[#b0bec5] mb-8 flex items-center justify-between text-[10px] uppercase tracking-[0.2em]">
-                        ${title}
-                        <span class="bg-white text-[#90a4ae] px-3 py-1 rounded-full border border-slate-100">${items.length}</span>
-                    </h4>
-                    ${header}
-                    <div class="space-y-5 flex-1">
-                        ${items.length === 0 ? `<div class="h-full flex flex-col items-center justify-center opacity-10 py-20 italic font-black tracking-widest">NO DATA</div>` : ''}
-                        ${items.map((item, i) => `
-                            <div class="group relative bg-white border border-slate-100 p-5 rounded-[2rem] hover:shadow-lg transition-all hover:-translate-y-1">
-                                ${renderFn(item)}
-                                <div class="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                    <button onclick="editRecord('${key}', ${i})" class="bg-[#91a5b8] text-white w-7 h-7 flex items-center justify-center rounded-full shadow-lg text-xs">✎</button>
-                                    <button onclick="deleteRecord('${key}', ${i})" class="bg-[#e57373] text-white w-7 h-7 flex items-center justify-center rounded-full shadow-lg text-xs">✕</button>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                    ${footer}
-                </div>
-            `;
-        }
-
-        // --- 表單邏輯 ---
-
-        function renderForms() {
-            const fTitle = document.getElementById('form-title');
-            fTitle.innerHTML = `
-                <div class="w-10 h-10 bg-[#91a5b8] text-white rounded-2xl flex items-center justify-center text-lg">${editingItem ? '✎' : '＋'}</div>
-                <span>${editingItem ? '修改紀錄' : '新增紀錄'}</span>
-            `;
-
-            const data = editingItem ? 
-                (editingItem.type === 'meals' ? records[selectedDateStr].meals[editingItem.index] : 
-                 editingItem.type === 'drinks' ? records[selectedDateStr].drinks[editingItem.index] :
-                 editingItem.type === 'exercise' ? records[selectedDateStr].exercise[editingItem.index] : {}) : {};
-
-            const container = document.getElementById('forms-container');
-            container.innerHTML = `
-                <!-- 飲食表單 -->
-                <div class="bg-white p-7 rounded-[3rem] border border-slate-100 space-y-4 shadow-sm hover:border-[#91a5b8]/30 transition-all">
-                    <div class="font-black text-xs text-[#546e7a] tracking-widest uppercase mb-2">MEAL ITEM</div>
-                    <select id="f-meal-type" class="w-full text-xs font-bold bg-[#f1f3f5] rounded-2xl p-4 outline-none">
-                        ${['breakfast', 'lunch', 'dinner', 'nightSnack', 'instantNoodles'].map(k => `<option value="${k}" ${data.type === k ? 'selected' : ''}>${CATEGORIES[k].label}</option>`).join('')}
-                    </select>
-                    <input id="f-meal-brand" placeholder="品牌 / 店家" class="w-full text-xs font-medium bg-[#f8f9fa] border border-slate-100 rounded-2xl p-4" value="${data.brand || ''}" />
-                    <input id="f-meal-name" placeholder="食物名稱 *" class="w-full text-xs font-bold bg-[#f8f9fa] border border-slate-100 rounded-2xl p-4" value="${data.name || ''}" />
-                    <input id="f-meal-amount" type="number" placeholder="金額 *" class="w-full text-xs font-bold bg-[#f8f9fa] border border-slate-100 rounded-2xl p-4" value="${data.amount || ''}" />
-                    <textarea id="f-meal-note" placeholder="備註..." class="w-full text-xs font-medium bg-[#f8f9fa] border border-slate-100 rounded-2xl p-4 h-24 resize-none">${data.note || ''}</textarea>
-                    <button onclick="submitMeal()" class="w-full bg-[#91a5b8] text-white text-xs font-black py-4 rounded-2xl shadow-lg hover:bg-[#7e8da1] transition-all uppercase tracking-widest">${editingItem?.type === 'meals' ? '更新' : '加入紀錄'}</button>
-                </div>
-
-                <!-- 飲料表單 -->
-                <div class="bg-[#fdfaf7] p-7 rounded-[3rem] border border-[#f2ece5] space-y-4 shadow-sm hover:border-[#c1a07d]/30 transition-all">
-                    <div class="font-black text-xs text-[#c1a07d] tracking-widest uppercase mb-2">DRINK</div>
-                    <input id="f-drink-brand" placeholder="品牌 / 店家" class="w-full text-xs font-medium bg-white border border-[#f2ece5] rounded-2xl p-4" value="${editingItem?.type === 'drinks' ? data.brand : ''}" />
-                    <input id="f-drink-name" placeholder="飲料名稱 *" class="w-full text-xs font-bold bg-white border border-[#f2ece5] rounded-2xl p-4" value="${editingItem?.type === 'drinks' ? data.name : ''}" />
-                    <div class="grid grid-cols-2 gap-3">
-                        <select id="f-drink-ice" class="text-[10px] font-black bg-white border border-[#f2ece5] rounded-2xl p-4 outline-none">
-                            ${ICE_OPTIONS.map(o => `<option value="${o}" ${editingItem?.type === 'drinks' && data.ice === o ? 'selected' : (o==='去冰'?'selected':'')}>${o}</option>`).join('')}
-                        </select>
-                        <select id="f-drink-sugar" class="text-[10px] font-black bg-white border border-[#f2ece5] rounded-2xl p-4 outline-none">
-                            ${SUGAR_OPTIONS.map(o => `<option value="${o}" ${editingItem?.type === 'drinks' && data.sugar === o ? 'selected' : (o==='無糖'?'selected':'')}>${o}</option>`).join('')}
-                        </select>
-                    </div>
-                    <input id="f-drink-amount" type="number" placeholder="金額 *" class="w-full text-xs font-bold bg-white border border-[#f2ece5] rounded-2xl p-4" value="${editingItem?.type === 'drinks' ? data.amount : ''}" />
-                    <textarea id="f-drink-note" placeholder="備註..." class="w-full text-xs font-medium bg-white border border-[#f2ece5] rounded-2xl p-4 h-24 resize-none">${editingItem?.type === 'drinks' ? data.note : ''}</textarea>
-                    <button onclick="submitDrink()" class="w-full bg-[#c1a07d] text-white text-xs font-black py-4 rounded-2xl shadow-lg hover:bg-[#a68a6b] transition-all uppercase tracking-widest">${editingItem?.type === 'drinks' ? '更新' : '加入紀錄'}</button>
-                </div>
-
-                <!-- 運動表單 -->
-                <div class="bg-[#f1f5f3] p-7 rounded-[3rem] border border-[#d1dbd6] space-y-4 shadow-sm">
-                    <div class="font-black text-xs text-[#4c5e56] tracking-widest uppercase mb-2">WORKOUT</div>
-                    <input id="f-ex-name" placeholder="運動項目 *" class="w-full text-xs font-bold bg-white border border-[#d1dbd6] rounded-2xl p-4" value="${editingItem?.type === 'exercise' ? data.name : ''}" />
-                    <input id="f-ex-loc" placeholder="地點" class="w-full text-xs font-medium bg-white border border-[#d1dbd6] rounded-2xl p-4" value="${editingItem?.type === 'exercise' ? data.location : ''}" />
-                    <input id="f-ex-time" placeholder="時長 / 強度" class="w-full text-xs font-medium bg-white border border-[#d1dbd6] rounded-2xl p-4" value="${editingItem?.type === 'exercise' ? data.time : ''}" />
-                    <textarea id="f-ex-note" placeholder="備註..." class="w-full text-xs font-medium bg-white border border-[#d1dbd6] rounded-2xl p-4 h-24 resize-none">${editingItem?.type === 'exercise' ? data.note : ''}</textarea>
-                    <button onclick="submitExercise()" class="w-full bg-[#8da69d] text-white text-xs font-black py-4 rounded-2xl shadow-lg hover:bg-[#6c857b] transition-all uppercase tracking-widest">${editingItem?.type === 'exercise' ? '更新' : '加入紀錄'}</button>
-                </div>
-
-                <!-- 健康表單 -->
-                <div class="space-y-6">
-                    <div class="bg-[#455a64] p-8 rounded-[3rem] shadow-lg border border-white/10">
-                        <div class="mb-4 text-[#b0bec5] font-black text-[10px] uppercase tracking-[0.2em]">WEIGHT RECORD</div>
-                        <input id="f-weight" type="number" step="0.1" placeholder="${records[selectedDateStr]?.weight || '--'} kg" class="bg-white/10 border-2 border-transparent focus:border-white/30 rounded-2xl text-white text-2xl font-black w-full p-4 outline-none" onblur="submitWeight(this.value)" />
-                    </div>
-                    <div class="bg-[#9eb8c0] p-8 rounded-[3rem] shadow-lg border border-white/10">
-                        <div class="mb-4 text-white font-black text-[10px] uppercase tracking-[0.2em]">WATER INTAKE</div>
-                        <input id="f-water" type="number" placeholder="${records[selectedDateStr]?.water || '--'} ml" class="bg-white/20 border-2 border-transparent focus:border-white/40 rounded-2xl text-white text-2xl font-black w-full p-4 outline-none placeholder:text-white/50" onblur="submitWater(this.value)" />
-                    </div>
-                </div>
-            `;
-        }
-
-        // --- 提交邏輯 ---
-
-        function ensureDate(d) {
-            if(!records[d]) records[d] = { meals: [], drinks: [], fruits: [], exercise: [], weight: '', water: 0 };
-        }
-
-        function submitMeal() {
-            const name = document.getElementById('f-meal-name').value;
-            const amount = document.getElementById('f-meal-amount').value;
-            if(!name || !amount) return;
-            ensureDate(selectedDateStr);
-            const data = {
-                type: document.getElementById('f-meal-type').value,
-                brand: document.getElementById('f-meal-brand').value,
-                name: name,
-                amount: amount,
-                note: document.getElementById('f-meal-note').value
-            };
-            if(editingItem?.type === 'meals') records[selectedDateStr].meals[editingItem.index] = data;
-            else records[selectedDateStr].meals.push(data);
-            editingItem = null;
-            saveAndRefresh();
-        }
-
-        function submitDrink() {
-            const name = document.getElementById('f-drink-name').value;
-            const amount = document.getElementById('f-drink-amount').value;
-            if(!name || !amount) return;
-            ensureDate(selectedDateStr);
-            const data = {
-                brand: document.getElementById('f-drink-brand').value,
-                name: name,
-                ice: document.getElementById('f-drink-ice').value,
-                sugar: document.getElementById('f-drink-sugar').value,
-                amount: amount,
-                note: document.getElementById('f-drink-note').value
-            };
-            if(editingItem?.type === 'drinks') records[selectedDateStr].drinks[editingItem.index] = data;
-            else records[selectedDateStr].drinks.push(data);
-            editingItem = null;
-            saveAndRefresh();
-        }
-
-        function submitExercise() {
-            const name = document.getElementById('f-ex-name').value;
-            if(!name) return;
-            ensureDate(selectedDateStr);
-            const data = {
-                name: name,
-                location: document.getElementById('f-ex-loc').value,
-                time: document.getElementById('f-ex-time').value,
-                note: document.getElementById('f-ex-note').value
-            };
-            if(editingItem?.type === 'exercise') records[selectedDateStr].exercise[editingItem.index] = data;
-            else records[selectedDateStr].exercise.push(data);
-            editingItem = null;
-            saveAndRefresh();
-        }
-
-        function submitWeight(v) {
-            if(!v) return;
-            ensureDate(selectedDateStr);
-            records[selectedDateStr].weight = v;
-            saveAndRefresh();
-        }
-
-        function submitWater(v) {
-            if(!v) return;
-            ensureDate(selectedDateStr);
-            records[selectedDateStr].water = parseInt(v);
-            saveAndRefresh();
-        }
-
-        function deleteRecord(key, index) {
-            records[selectedDateStr][key].splice(index, 1);
-            saveAndRefresh();
-        }
-
-        function editRecord(key, index) {
-            editingItem = { type: key, index: index };
-            renderForms();
-            document.getElementById('modal').scrollTo({ top: 1000, behavior: 'smooth' });
-        }
-
-        window.onload = init;
+        initApp();
     </script>
 </body>
 </html>
